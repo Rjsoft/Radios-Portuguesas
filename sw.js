@@ -1,7 +1,7 @@
 // Service worker da Rádios Portugal Live.
 // Guarda apenas a interface (para abrir offline). Nunca guarda nem interceta os streams de rádio.
 // Ao alterar ícones, logos ou o manifesto, aumente a versão abaixo.
-const CACHE = "radiospt-v2";
+const CACHE = "radiospt-v3";
 const ASSETS = [
   "./",
   "./manifest.webmanifest",
@@ -12,7 +12,9 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: "reload" ignora a cache HTTP do browser, para não guardar ficheiros antigos logo após uma publicação.
+  const requests = ASSETS.map((url) => new Request(url, { cache: "reload" }));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(requests)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -26,14 +28,24 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   // Streams e tudo o que venha de outros domínios: o browser trata diretamente.
-  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
+  // Áudio/vídeo ou pedidos parciais (Range), mesmo no próprio domínio: nunca passam pela cache.
+  if (req.destination === "audio" || req.destination === "video" || req.headers.has("range")) return;
 
   if (req.mode === "navigate") {
-    // Página: tenta a rede primeiro (para receber atualizações); sem rede, usa a cópia guardada.
+    // Página: tenta a rede primeiro (para receber atualizações); sem rede ou com erro do servidor, usa a cópia guardada.
+    const isAppPage = url.pathname.endsWith("/") || url.pathname.endsWith("/index.html");
     event.respondWith(
       fetch(req)
         .then((res) => {
-          if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put("./", copy)); }
+          const isHtml = (res.headers.get("content-type") || "").includes("text/html");
+          if (res.ok && isAppPage && isHtml) {
+            const copy = res.clone();
+            event.waitUntil(caches.open(CACHE).then((c) => c.put("./", copy)));
+            return res;
+          }
+          if (!res.ok && isAppPage) return caches.match("./").then((hit) => hit || res);
           return res;
         })
         .catch(() => caches.match("./"))
@@ -44,7 +56,10 @@ self.addEventListener("fetch", (event) => {
   // Ícones, logos e manifesto: cache primeiro; o que vier da rede fica guardado para uso offline.
   event.respondWith(
     caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+      if (res.ok) {
+        const copy = res.clone();
+        event.waitUntil(caches.open(CACHE).then((c) => c.put(req, copy)));
+      }
       return res;
     }))
   );
