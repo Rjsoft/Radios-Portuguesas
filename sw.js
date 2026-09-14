@@ -1,7 +1,7 @@
 // Service worker da Rádios Portugal Live.
 // Guarda apenas a interface (para abrir offline). Nunca guarda nem interceta os streams de rádio.
-// Ao alterar ícones ou o manifesto, aumente a versão abaixo.
-const CACHE = "radiospt-v1";
+// Ao alterar ícones, logos ou o manifesto, aumente a versão abaixo.
+const CACHE = "radiospt-v2";
 const ASSETS = [
   "./",
   "./manifest.webmanifest",
@@ -41,6 +41,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Ícones e manifesto: cache primeiro.
-  event.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
+  // Ícones, logos e manifesto: cache primeiro; o que vier da rede fica guardado para uso offline.
+  event.respondWith(
+    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(req, copy)); }
+      return res;
+    }))
+  );
 });

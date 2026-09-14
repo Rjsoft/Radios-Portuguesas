@@ -47,6 +47,8 @@
   .card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .card-top { display: flex; gap: 10px; align-items: center; }
   .avatar { flex: none; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: .85rem; color: #fff; }
+  .avatar.has-logo { background: #fff; border: 1px solid var(--border); padding: 4px; }
+  .avatar img { width: 100%; height: 100%; object-fit: contain; }
   .name { margin: 0; font-size: 1rem; font-weight: 650; }
   .meta { margin: 0; color: var(--muted); font-size: .85rem; }
   .live { color: var(--live); font-weight: 700; font-size: .8rem; letter-spacing: .03em; }
@@ -129,41 +131,42 @@
    LISTA DE RÁDIOS — edite aqui para adicionar/remover.
    category: music | news | sports | general | regional | thematic
    streamType: mp3 | aac | hls
+   logo: opcional, ex.: "logos/tsf.png" (PNG 128x128); sem logo mostra as iniciais
    enabled: false esconde a rádio (ex.: stream deixou de funcionar)
    ========================================================= */
 const STATIONS = [
-  { id: "radio-comercial", name: "Rádio Comercial", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/comercial.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://radiocomercial.pt", enabled: true },
-  { id: "rfm", name: "RFM", region: "Portugal", category: "music", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/RFMAAC.aac", streamType: "aac", codec: "AAC", website: "https://rfm.sapo.pt", enabled: true },
-  { id: "m80", name: "M80 Rádio", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/m80.aac", streamType: "aac", codec: "AAC", bitrate: 128, website: "https://m80.pt", enabled: true },
-  { id: "renascenca", name: "Rádio Renascença", region: "Portugal", category: "general", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO_RENASCENCA_SC", streamType: "mp3", website: "https://rr.pt", enabled: true },
+  { id: "radio-comercial", name: "Rádio Comercial", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/comercial.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://radiocomercial.pt", logo: "logos/radio-comercial.png", enabled: true },
+  { id: "rfm", name: "RFM", region: "Portugal", category: "music", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/RFMAAC.aac", streamType: "aac", codec: "AAC", website: "https://rfm.sapo.pt", logo: "logos/rfm.png", enabled: true },
+  { id: "m80", name: "M80 Rádio", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/m80.aac", streamType: "aac", codec: "AAC", bitrate: 128, website: "https://m80.pt", logo: "logos/m80.png", enabled: true },
+  { id: "renascenca", name: "Rádio Renascença", region: "Portugal", category: "general", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO_RENASCENCA_SC", streamType: "mp3", website: "https://rr.pt", logo: "logos/renascenca.png", enabled: true },
   { id: "antena-1", name: "Antena 1", region: "Portugal", category: "general", streamUrl: "https://radiocast.rtp.pt/antena180a.mp3", streamType: "mp3", codec: "MP3", website: "https://www.rtp.pt/antena1", enabled: true },
   { id: "antena-2", name: "Antena 2", region: "Portugal", category: "music", streamUrl: "https://radiocast.rtp.pt/antena280a.mp3", streamType: "mp3", codec: "MP3", website: "https://www.rtp.pt/antena2", enabled: true },
   { id: "antena-3", name: "Antena 3", region: "Portugal", category: "music", streamUrl: "https://radiocast.rtp.pt/antena380a.mp3", streamType: "mp3", codec: "MP3", website: "https://www.rtp.pt/antena3", enabled: true },
-  { id: "tsf", name: "TSF", region: "Portugal", category: "news", streamUrl: "https://directo.tsf.pt/tsfdirecto.mp3", streamType: "mp3", codec: "MP3", website: "https://www.tsf.pt", enabled: true },
-  { id: "observador", name: "Rádio Observador", region: "Portugal", category: "news", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/OBSERVADORAAC_SC", streamType: "aac", codec: "AAC", website: "https://observador.pt/radio", enabled: true },
-  { id: "mega-hits", name: "Mega Hits", region: "Portugal", category: "music", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/MEGA_HITS_SC", streamType: "mp3", website: "https://megahits.sapo.pt", enabled: true },
-  { id: "cidade-fm", name: "Cidade FM", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/cidade.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://cidade.fm", enabled: true },
-  { id: "smooth-fm", name: "Smooth FM", region: "Lisboa", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/smooth.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://smoothfm.iol.pt", enabled: true },
-  { id: "cm-radio", name: "CM Rádio", region: "Portugal", category: "news", streamUrl: "https://emdireto.cmradio.pt/audio2/output-stream_1.m3u8", streamType: "hls", codec: "HLS", website: "https://www.cmjornal.pt/cm-radio", enabled: true },
+  { id: "tsf", name: "TSF", region: "Portugal", category: "news", streamUrl: "https://directo.tsf.pt/tsfdirecto.mp3", streamType: "mp3", codec: "MP3", website: "https://www.tsf.pt", logo: "logos/tsf.png", enabled: true },
+  { id: "observador", name: "Rádio Observador", region: "Portugal", category: "news", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/OBSERVADORAAC_SC", streamType: "aac", codec: "AAC", website: "https://observador.pt/radio", logo: "logos/observador.png", enabled: true },
+  { id: "mega-hits", name: "Mega Hits", region: "Portugal", category: "music", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/MEGA_HITS_SC", streamType: "mp3", website: "https://megahits.sapo.pt", logo: "logos/mega-hits.png", enabled: true },
+  { id: "cidade-fm", name: "Cidade FM", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/cidade.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://cidade.fm", logo: "logos/cidade-fm.png", enabled: true },
+  { id: "smooth-fm", name: "Smooth FM", region: "Lisboa", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/smooth.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://smoothfm.iol.pt", logo: "logos/smooth-fm.png", enabled: true },
+  { id: "cm-radio", name: "CM Rádio", region: "Portugal", category: "news", streamUrl: "https://emdireto.cmradio.pt/audio2/output-stream_1.m3u8", streamType: "hls", codec: "HLS", website: "https://www.cmjornal.pt/cm-radio", logo: "logos/cm-radio.png", enabled: true },
   { id: "nova-era", name: "Rádio Nova Era", city: "Porto", region: "Norte", category: "music", streamUrl: "https://centova.radio.com.pt/proxy/478?mp=/stream", streamType: "mp3", codec: "MP3", website: "https://www.radio-nova-era.pt", enabled: true },
-  { id: "radio-marginal", name: "Rádio Marginal", region: "Lisboa", category: "music", streamUrl: "https://centova.radios.pt/proxy/499?mp=/stream", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://marginal.fm", enabled: true },
+  { id: "radio-marginal", name: "Rádio Marginal", region: "Lisboa", category: "music", streamUrl: "https://centova.radios.pt/proxy/499?mp=/stream", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://marginal.fm", logo: "logos/radio-marginal.png", enabled: true },
   { id: "radio-amalia", name: "Rádio Amália", city: "Lisboa", region: "Lisboa", category: "music", streamUrl: "https://centova.radios.pt/proxy/496?mp=/stream/1/", streamType: "mp3", codec: "MP3", website: "https://radioamalia.pt", enabled: true },
   { id: "golo-fm", name: "Golo FM", region: "Portugal", category: "sports", streamUrl: "https://sp0.redeaudio.com/8154/stream", streamType: "mp3", codec: "MP3", website: "https://golofm.pt", enabled: true },
-  { id: "radio-regional", name: "Rádio Regional", region: "Portugal", category: "regional", streamUrl: "https://play.radioregional.pt/stream/1/", streamType: "mp3", codec: "MP3", website: "https://radioregional.pt", enabled: true },
+  { id: "radio-regional", name: "Rádio Regional", region: "Portugal", category: "regional", streamUrl: "https://play.radioregional.pt/stream/1/", streamType: "mp3", codec: "MP3", website: "https://radioregional.pt", logo: "logos/radio-regional.png", enabled: true },
   { id: "radio-calheta", name: "Rádio Calheta", region: "Madeira", category: "regional", streamUrl: "https://player.radiocalheta.pt/listen/radiocalheta/live", streamType: "mp3", codec: "MP3", website: "https://radiocalheta.pt", enabled: true },
   { id: "radio-clube-madeira", name: "Rádio Clube Madeira", region: "Madeira", category: "regional", streamUrl: "https://audio.serv.pt/8020/stream.mp3", streamType: "mp3", codec: "MP3", enabled: true },
-  { id: "rua-fm", name: "RUA FM", city: "Faro", region: "Algarve", category: "regional", streamUrl: "https://centova.radio.com.pt/proxy/037?mp=/stream", streamType: "mp3", codec: "MP3", website: "https://rua.pt", enabled: true },
+  { id: "rua-fm", name: "RUA FM", city: "Faro", region: "Algarve", category: "regional", streamUrl: "https://centova.radio.com.pt/proxy/037?mp=/stream", streamType: "mp3", codec: "MP3", website: "https://rua.pt", logo: "logos/rua-fm.png", enabled: true },
 
   // Canais temáticos
-  { id: "m80-80s", name: "M80 80s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8080.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
-  { id: "m80-90s", name: "M80 90s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8090.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
-  { id: "m80-70s", name: "M80 70s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8070.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
-  { id: "m80-ballads", name: "M80 Ballads", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80ballads.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
-  { id: "m80-dance", name: "M80 Dance", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80dance.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
-  { id: "m80-portugal", name: "M80 Portugal", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80nacional.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
-  { id: "comercial-rock", name: "Rádio Comercial Rock", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/rcrock.aac", streamType: "aac", codec: "AAC", website: "https://radiocomercial.pt", enabled: true },
-  { id: "comercial-portugal", name: "Rádio Comercial Portugal", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/rctuga.aac", streamType: "aac", codec: "AAC", website: "https://radiocomercial.pt", enabled: true },
-  { id: "smooth-soul", name: "Smooth FM Soul", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/smoothsoul.aac", streamType: "aac", codec: "AAC", website: "https://smoothfm.iol.pt", enabled: true },
+  { id: "m80-80s", name: "M80 80s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8080.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", logo: "logos/m80.png", enabled: true },
+  { id: "m80-90s", name: "M80 90s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8090.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", logo: "logos/m80.png", enabled: true },
+  { id: "m80-70s", name: "M80 70s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8070.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", logo: "logos/m80.png", enabled: true },
+  { id: "m80-ballads", name: "M80 Ballads", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80ballads.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", logo: "logos/m80.png", enabled: true },
+  { id: "m80-dance", name: "M80 Dance", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80dance.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", logo: "logos/m80.png", enabled: true },
+  { id: "m80-portugal", name: "M80 Portugal", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80nacional.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", logo: "logos/m80.png", enabled: true },
+  { id: "comercial-rock", name: "Rádio Comercial Rock", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/rcrock.aac", streamType: "aac", codec: "AAC", website: "https://radiocomercial.pt", logo: "logos/radio-comercial.png", enabled: true },
+  { id: "comercial-portugal", name: "Rádio Comercial Portugal", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/rctuga.aac", streamType: "aac", codec: "AAC", website: "https://radiocomercial.pt", logo: "logos/radio-comercial.png", enabled: true },
+  { id: "smooth-soul", name: "Smooth FM Soul", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/smoothsoul.aac", streamType: "aac", codec: "AAC", website: "https://smoothfm.iol.pt", logo: "logos/smooth-fm.png", enabled: true },
 ];
 
 const CATEGORY_LABELS = { music: "Música", news: "Notícias", sports: "Desporto", general: "Generalista", regional: "Regional", thematic: "Temáticas" };
@@ -190,6 +193,23 @@ function initials(name) {
   return words.map((w) => w[0]).join("").slice(0, 3).toUpperCase();                        // RC
 }
 function avatarColor(id) { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 45% 38%)`; }
+// Preenche um avatar com o logo da rádio; se não houver logo (ou falhar), usa as iniciais.
+function paintAvatar(av, station) {
+  const showInitials = () => {
+    av.classList.remove("has-logo");
+    av.textContent = initials(station.name);
+    av.style.background = avatarColor(station.id);
+  };
+  if (!station.logo) return showInitials();
+  const img = document.createElement("img");
+  img.src = station.logo;
+  img.alt = "";
+  img.loading = "lazy";
+  img.onerror = showInitials;
+  av.classList.add("has-logo");
+  av.style.background = "";
+  av.replaceChildren(img);
+}
 function describe(s) { return [s.city, s.region].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Portugal"; }
 function techInfo(s) { return [s.codec, s.bitrate && s.bitrate + " kbps"].filter(Boolean).join(" · "); }
 
@@ -244,9 +264,7 @@ function play(station) {
   current = station;
   store.set("lastStationId", station.id);
   $("pName").textContent = station.name;
-  const av = $("pAvatar");
-  av.textContent = initials(station.name);
-  av.style.background = avatarColor(station.id);
+  paintAvatar($("pAvatar"), station);
 
   if (station.streamType === "hls" && !audio.canPlayType("application/vnd.apple.mpegurl")) {
     setStatus("error");
@@ -326,8 +344,8 @@ function render() {
     const active = current && current.id === s.id;
     const isPlaying = active && (status === "playing" || status === "loading");
     const isFav = favorites.has(s.id);
-    const avatar = el("div", { className: "avatar", textContent: initials(s.name), attrs: { "aria-hidden": "true" } });
-    avatar.style.background = avatarColor(s.id);
+    const avatar = el("div", { className: "avatar", attrs: { "aria-hidden": "true" } });
+    paintAvatar(avatar, s);
 
     const info = el("div", {}, [
       el("p", { className: "name", textContent: s.name }),
@@ -363,8 +381,7 @@ const last = STATIONS.find((s) => s.id === store.get("lastStationId") && s.enabl
 if (last) { // mostra a última rádio no leitor, sem tocar automaticamente
   current = last;
   $("pName").textContent = last.name;
-  $("pAvatar").textContent = initials(last.name);
-  $("pAvatar").style.background = avatarColor(last.id);
+  paintAvatar($("pAvatar"), last);
 }
 setStatus(current ? "paused" : "idle");
 if (current) $("pStatus").textContent = "Última rádio ouvida";
