@@ -10,16 +10,26 @@
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-title" content="Rádios PT">
+<script>
+  // Aplica o tema antes de desenhar a página (evita um "flash" claro no tema escuro).
+  try {
+    const t = JSON.parse(localStorage.getItem("radiospt.theme"));
+    const dark = t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+  } catch {}
+</script>
 <style>
   :root {
     --bg: #f6f5f2; --surface: #ffffff; --text: #1c1b19; --muted: #66625b;
     --border: #e2dfd8; --accent: #0b6e4f; --accent-text: #ffffff; --live: #c62828;
-    --chip: #ecebe6;
+    --chip: #ecebe6; --control-border: #8a857d; /* contornos de controlos: contraste ≥ 3:1 */
+    color-scheme: light;
   }
   :root[data-theme="dark"] {
     --bg: #121412; --surface: #1c1f1c; --text: #eceae4; --muted: #a5a29a;
     --border: #2f332f; --accent: #3ccf95; --accent-text: #0b1a13; --live: #ff6b6b;
-    --chip: #262a26;
+    --chip: #262a26; --control-border: #737873;
+    color-scheme: dark;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -35,11 +45,11 @@
   header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 0 12px; }
   h1 { margin: 0; font-size: 1.5rem; }
   .subtitle { margin: 2px 0 0; color: var(--muted); }
-  .theme-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 8px 14px; min-height: 44px; }
+  .theme-btn { border: 1px solid var(--control-border); background: var(--surface); border-radius: 999px; padding: 8px 14px; min-height: 44px; }
 
-  .search { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); min-height: 44px; }
+  .search { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--control-border); background: var(--surface); min-height: 44px; }
   .filters { display: flex; gap: 8px; overflow-x: auto; padding: 12px 0; }
-  .filters button { flex: none; border: 1px solid var(--border); background: var(--chip); border-radius: 999px; padding: 8px 14px; min-height: 40px; }
+  .filters button { flex: none; border: 1px solid var(--control-border); background: var(--chip); border-radius: 999px; padding: 8px 14px; min-height: 40px; }
   .filters button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 
   .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
@@ -53,7 +63,7 @@
   .meta { margin: 0; color: var(--muted); font-size: .85rem; }
   .live { color: var(--live); font-weight: 700; font-size: .8rem; letter-spacing: .03em; }
   .actions { display: flex; gap: 6px; align-items: center; margin-top: auto; }
-  .icon-btn { border: 1px solid var(--border); background: transparent; border-radius: 10px; min-width: 44px; min-height: 44px; font-size: 1.1rem; }
+  .icon-btn { border: 1px solid var(--control-border); background: transparent; border-radius: 10px; min-width: 44px; min-height: 44px; font-size: 1.1rem; }
   .fav[aria-pressed="true"] { color: var(--live); }
   .play-btn { flex: 1; border: 0; background: var(--accent); color: var(--accent-text); border-radius: 10px; min-height: 44px; font-weight: 600; }
   .empty { text-align: center; color: var(--muted); padding: 40px 0; }
@@ -85,19 +95,20 @@
       <h1>Rádios Portugal Live</h1>
       <p class="subtitle">Rádio portuguesa, em direto.</p>
     </div>
-    <button id="themeBtn" class="theme-btn" type="button" aria-label="Mudar tema"></button>
+    <button id="themeBtn" class="theme-btn" type="button"></button>
   </header>
 
   <label for="search" class="sr-only">Pesquisar rádio</label>
-  <input id="search" class="search" type="search" placeholder="🔎 Pesquisar rádio, cidade, região, género…" autocomplete="off">
+  <input id="search" class="search" type="search" placeholder="🔎 Pesquisar rádio, cidade, região ou categoria…" autocomplete="off">
 
   <nav id="filters" class="filters" aria-label="Filtros"></nav>
 
   <main>
     <ul id="grid" class="grid"></ul>
     <div id="empty" class="empty" hidden>
-      <p><strong>Nenhuma rádio encontrada.</strong><br>Experimente outro nome, cidade ou género.</p>
+      <p><strong id="emptyTitle">Nenhuma rádio encontrada.</strong><br><span id="emptyHint"></span></p>
     </div>
+    <p id="resultsStatus" class="sr-only" role="status" aria-live="polite"></p>
   </main>
 </div>
 
@@ -230,7 +241,9 @@ const themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
 function applyTheme() {
   const dark = theme === "dark" || (theme === "system" && themeMedia.matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  $("themeBtn").textContent = { system: "🖥 Sistema", light: "☀ Claro", dark: "🌙 Escuro" }[theme];
+  const label = { system: "Sistema", light: "Claro", dark: "Escuro" }[theme];
+  $("themeBtn").textContent = { system: "🖥", light: "☀", dark: "🌙" }[theme] + " " + label;
+  $("themeBtn").setAttribute("aria-label", `Tema: ${label}. Mudar tema`); // inclui o texto visível (WCAG 2.5.3)
 }
 $("themeBtn").onclick = () => { theme = { system: "light", light: "dark", dark: "system" }[theme]; store.set("theme", theme); applyTheme(); };
 themeMedia.addEventListener("change", applyTheme);
@@ -254,10 +267,14 @@ function setStatus(next) {
   else if (previous !== "loading") startConnectTimer();
   const el = $("pStatus");
   el.classList.toggle("error", next === "error");
-  el.textContent = {
-    idle: "", loading: "A ligar…", playing: "🔴 Em direto", paused: "Em pausa",
-    error: "Não foi possível ligar a esta rádio. O stream pode estar temporariamente indisponível.",
-  }[next];
+  // Só reescreve o texto quando o estado muda: evita anúncios repetidos no leitor de ecrã a cada buffering.
+  if (next !== previous) {
+    const text = {
+      idle: "", loading: "A ligar…", playing: "Em direto", paused: "Em pausa",
+      error: "Não foi possível ligar a esta rádio. O stream pode estar temporariamente indisponível.",
+    }[next];
+    el.replaceChildren(...(next === "playing" ? [liveDot(), text] : [text]));
+  }
   $("pErrorActions").hidden = next !== "error";
   $("siteBtn").hidden = !(current && current.website);
   const playing = next === "playing" || next === "loading";
@@ -265,6 +282,15 @@ function setStatus(next) {
   $("pPlay").setAttribute("aria-label", playing ? "Pausar" : "Reproduzir");
   $("pPlay").disabled = !current;
   updatePlayerCards();
+  updateMediaSession();
+}
+
+// "🔴" decorativo, escondido dos leitores de ecrã (não é lido como "círculo vermelho").
+function liveDot() {
+  const dot = document.createElement("span");
+  dot.textContent = "🔴 ";
+  dot.setAttribute("aria-hidden", "true");
+  return dot;
 }
 
 function stopStream() {
@@ -312,6 +338,31 @@ audio.addEventListener("pause", () => { if (audio.paused && (status === "playing
 // Um stream em direto não deve terminar: se terminar, a ligação caiu.
 audio.addEventListener("ended", () => { if (audio.getAttribute("src") && status !== "paused") setStatus("error"); });
 
+/* ---------- Ecrã de bloqueio / teclas multimédia (Media Session) ---------- */
+const isBusy = () => status === "playing" || status === "loading";
+const mediaActions = {
+  play: () => { if (current && !isBusy()) play(current); },
+  pause: () => { if (current && isBusy()) togglePlay(current); },
+  stop: () => { if (current && isBusy()) togglePlay(current); },
+};
+let mediaStationId = null;
+function updateMediaSession() {
+  if (!("mediaSession" in navigator) || !current) return;
+  if (mediaStationId !== current.id) { // metadados só mudam quando muda a rádio
+    mediaStationId = current.id;
+    const artwork = current.logo
+      ? [{ src: new URL(current.logo, document.baseURI).href, sizes: "128x128", type: "image/png" }]
+      : [{ src: new URL("icons/icon-512.png", document.baseURI).href, sizes: "512x512", type: "image/png" }];
+    navigator.mediaSession.metadata = new MediaMetadata({ title: current.name, artist: "Rádios Portugal Live", album: "Em direto", artwork });
+  }
+  navigator.mediaSession.playbackState = isBusy() ? "playing" : status === "paused" ? "paused" : "none";
+}
+if ("mediaSession" in navigator) {
+  for (const [action, handler] of Object.entries(mediaActions)) {
+    try { navigator.mediaSession.setActionHandler(action, handler); } catch {} // ação não suportada neste browser
+  }
+}
+
 $("pPlay").onclick = () => current && togglePlay(current);
 $("retryBtn").onclick = () => current && play(current);
 $("siteBtn").onclick = () => current && current.website && window.open(current.website, "_blank", "noopener");
@@ -322,8 +373,13 @@ function applyVolume() {
   audio.muted = muted;
   $("vol").value = volume;
   $("muteBtn").textContent = muted || volume === 0 ? "🔇" : "🔊";
-  $("muteBtn").setAttribute("aria-label", muted ? "Ativar som" : "Silenciar");
+  // botão de alternar: nome fixo + aria-pressed (o estado é anunciado sem contradições)
+  $("muteBtn").setAttribute("aria-label", "Silenciar");
+  $("muteBtn").setAttribute("aria-pressed", String(muted));
 }
+// iOS ignora audio.volume (só o sistema controla o volume): nesse caso o slider não faz nada e é escondido.
+const volumeIsControllable = (() => { const probe = new Audio(); probe.volume = 0.5; return probe.volume === 0.5; })();
+$("vol").hidden = !volumeIsControllable;
 $("vol").oninput = (e) => { volume = Number(e.target.value); muted = false; store.set("volume", volume); store.set("muted", muted); applyVolume(); };
 $("muteBtn").onclick = () => { muted = !muted; store.set("muted", muted); applyVolume(); };
 
@@ -407,6 +463,23 @@ function applyFilters() {
     if (show) visible++;
   }
   $("empty").hidden = visible > 0;
+  const noFavorites = filter === "fav" && !query;
+  $("emptyTitle").textContent = noFavorites ? "Ainda não tem rádios favoritas." : "Nenhuma rádio encontrada.";
+  $("emptyHint").textContent = noFavorites ? "Toque em ♡ numa rádio para a adicionar." : "Experimente outro nome, cidade, região ou categoria.";
+  announceResults(visible);
+}
+
+// Anuncia o número de resultados ao leitor de ecrã, só depois de o utilizador parar de escrever.
+let announceTimer;
+let lastAnnounced = null;
+function announceResults(visible) {
+  clearTimeout(announceTimer);
+  if (lastAnnounced === null) { lastAnnounced = visible; return; } // ao abrir a app não anuncia nada
+  announceTimer = setTimeout(() => {
+    if (visible === lastAnnounced) return;
+    lastAnnounced = visible;
+    $("resultsStatus").textContent = visible === 0 ? "Nenhuma rádio encontrada" : visible === 1 ? "1 rádio" : `${visible} rádios`;
+  }, 600);
 }
 
 function toggleFavorite(id) {
@@ -422,7 +495,7 @@ function updateFavorite(id) {
   const isFav = favorites.has(id);
   card.favBtn.textContent = isFav ? "♥" : "♡";
   card.favBtn.setAttribute("aria-pressed", String(isFav));
-  card.favBtn.setAttribute("aria-label", (isFav ? "Remover dos favoritos: " : "Adicionar aos favoritos: ") + card.station.name);
+  card.favBtn.setAttribute("aria-label", "Favorito: " + card.station.name); // nome fixo; o estado vem do aria-pressed
 }
 
 // Atualiza o estado do leitor num cartão (ativo, "EM DIRETO"/"A ligar…", botão Ouvir/Pausar).
@@ -434,7 +507,7 @@ function updateCard(id) {
   card.li.classList.toggle("active", active);
   card.statusEl.hidden = !busy;
   card.statusEl.className = active && status === "playing" ? "live" : "meta";
-  card.statusEl.textContent = active && status === "playing" ? "🔴 EM DIRETO" : "A ligar…";
+  card.statusEl.replaceChildren(...(active && status === "playing" ? [liveDot(), "EM DIRETO"] : ["A ligar…"]));
   card.playBtn.textContent = busy ? "⏸ Pausar" : "▶ Ouvir";
   card.playBtn.setAttribute("aria-label", (busy ? "Pausar " : "Ouvir ") + card.station.name);
 }
