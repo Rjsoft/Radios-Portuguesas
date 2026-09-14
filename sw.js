@@ -1,7 +1,7 @@
 // Service worker da Rádios Portugal Live.
 // Guarda apenas a interface (para abrir offline). Nunca guarda nem interceta os streams de rádio.
 // Ao alterar ícones, logos ou o manifesto, aumente a versão abaixo.
-const CACHE = "radiospt-v3";
+const CACHE = "radiospt-v4";
 const ASSETS = [
   "./",
   "./manifest.webmanifest",
