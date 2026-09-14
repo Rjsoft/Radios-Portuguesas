@@ -217,12 +217,12 @@ function paintAvatar(av, station) {
 function describe(s) { return [s.city, s.region].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Portugal"; }
 function techInfo(s) { return [s.codec, s.bitrate && s.bitrate + " kbps"].filter(Boolean).join(" · "); }
 
-function matches(s) {
+// card: { station, hay } — hay é o texto de pesquisa já normalizado (calculado uma vez)
+function matches(card) {
+  const s = card.station;
   if (filter === "fav" && !favorites.has(s.id)) return false;
   if (filter !== "all" && filter !== "fav" && s.category !== filter) return false;
-  if (!query) return true;
-  const hay = normalize([s.name, s.city, s.region, s.frequency, CATEGORY_LABELS[s.category], s.category].join(" "));
-  return hay.includes(query);
+  return !query || card.hay.includes(query);
 }
 
 /* ---------- Tema ---------- */
@@ -264,7 +264,7 @@ function setStatus(next) {
   $("pPlay").textContent = playing ? "⏸" : "▶";
   $("pPlay").setAttribute("aria-label", playing ? "Pausar" : "Reproduzir");
   $("pPlay").disabled = !current;
-  render();
+  updatePlayerCards();
 }
 
 function stopStream() {
@@ -336,15 +336,24 @@ async function copyUrl(station) {
 }
 
 /* ---------- Interface ---------- */
+// Filtros e cartões são criados uma única vez. Pesquisa e filtros apenas mostram/escondem cartões,
+// e o leitor só atualiza os cartões afetados — o foco do teclado nunca se perde e escala para centenas de rádios.
+const collator = new Intl.Collator("pt");
+const cards = new Map(); // id -> { station, hay, li, statusEl, favBtn, playBtn }
+let shownActiveId = null; // cartão atualmente marcado como ativo
+
 function renderFilters() {
-  const nav = $("filters");
-  nav.replaceChildren(...FILTERS.map(([key, label]) => {
+  $("filters").replaceChildren(...FILTERS.map(([key, label]) => {
     const b = document.createElement("button");
-    b.type = "button"; b.textContent = label;
-    b.setAttribute("aria-pressed", String(filter === key));
-    b.onclick = () => { filter = key; renderFilters(); render(); };
+    b.type = "button"; b.textContent = label; b.dataset.filter = key;
+    b.onclick = () => { filter = key; updateFilterButtons(); applyFilters(); };
     return b;
   }));
+  updateFilterButtons();
+}
+
+function updateFilterButtons() {
+  for (const b of $("filters").children) b.setAttribute("aria-pressed", String(b.dataset.filter === filter));
 }
 
 function el(tag, props = {}, children = []) {
@@ -357,46 +366,95 @@ function el(tag, props = {}, children = []) {
   return e;
 }
 
-function render() {
-  const list = STATIONS.filter((s) => s.enabled && matches(s)).sort((a, b) => a.name.localeCompare(b.name, "pt"));
-  $("empty").hidden = list.length > 0;
-  $("grid").replaceChildren(...list.map((s) => {
-    const active = current && current.id === s.id;
-    const isPlaying = active && (status === "playing" || status === "loading");
-    const isFav = favorites.has(s.id);
+function buildCards() {
+  const fragment = document.createDocumentFragment();
+  const list = STATIONS.filter((s) => s.enabled).sort((a, b) => collator.compare(a.name, b.name));
+  for (const s of list) {
     const avatar = el("div", { className: "avatar", attrs: { "aria-hidden": "true" } });
     paintAvatar(avatar, s);
-
-    const info = el("div", {}, [
-      el("p", { className: "name", textContent: s.name }),
-      el("p", { className: "meta", textContent: describe(s) + (s.frequency ? " · " + s.frequency : "") }),
-    ]);
-    const details = [el("p", { className: "meta", textContent: [CATEGORY_LABELS[s.category], techInfo(s)].filter(Boolean).join(" · ") })];
-    if (active && status === "playing") details.push(el("span", { className: "live", textContent: "🔴 EM DIRETO" }));
-    if (active && status === "loading") details.push(el("span", { className: "meta", textContent: "A ligar…" }));
-
-    return el("li", { className: "card" + (active ? " active" : "") }, [
-      el("div", { className: "card-top" }, [avatar, info]),
-      ...details,
+    const statusEl = el("span", { className: "meta", hidden: true });
+    const favBtn = el("button", { type: "button", className: "icon-btn fav", onclick: () => toggleFavorite(s.id) });
+    const playBtn = el("button", { type: "button", className: "play-btn", onclick: () => togglePlay(s) });
+    const li = el("li", { className: "card" }, [
+      el("div", { className: "card-top" }, [avatar, el("div", {}, [
+        el("p", { className: "name", textContent: s.name }),
+        el("p", { className: "meta", textContent: describe(s) + (s.frequency ? " · " + s.frequency : "") }),
+      ])]),
+      el("p", { className: "meta", textContent: [CATEGORY_LABELS[s.category], techInfo(s)].filter(Boolean).join(" · ") }),
+      statusEl,
       el("div", { className: "actions" }, [
-        el("button", { type: "button", className: "icon-btn fav", textContent: isFav ? "♥" : "♡",
-          attrs: { "aria-pressed": String(isFav), "aria-label": (isFav ? "Remover dos favoritos: " : "Adicionar aos favoritos: ") + s.name },
-          onclick: () => { isFav ? favorites.delete(s.id) : favorites.add(s.id); store.set("favorites", [...favorites]); render(); } }),
+        favBtn,
         el("button", { type: "button", className: "icon-btn", textContent: "⧉", title: "Copiar URL do stream",
           attrs: { "aria-label": "Copiar URL do stream: " + s.name }, onclick: () => copyUrl(s) }),
-        el("button", { type: "button", className: "play-btn", textContent: isPlaying ? "⏸ Pausar" : "▶ Ouvir",
-          attrs: { "aria-label": (isPlaying ? "Pausar " : "Ouvir ") + s.name }, onclick: () => togglePlay(s) }),
+        playBtn,
       ]),
     ]);
-  }));
+    const hay = normalize([s.name, s.city, s.region, s.frequency, CATEGORY_LABELS[s.category], s.category].join(" "));
+    cards.set(s.id, { station: s, hay, li, statusEl, favBtn, playBtn });
+    updateFavorite(s.id);
+    updateCard(s.id);
+    fragment.append(li);
+  }
+  $("grid").replaceChildren(fragment);
 }
 
-$("search").addEventListener("input", (e) => { query = normalize(e.target.value.trim()); render(); });
+// Mostra/esconde cartões conforme pesquisa e filtro (sem recriar nada).
+function applyFilters() {
+  let visible = 0;
+  for (const card of cards.values()) {
+    const show = matches(card);
+    card.li.hidden = !show;
+    if (show) visible++;
+  }
+  $("empty").hidden = visible > 0;
+}
+
+function toggleFavorite(id) {
+  favorites.has(id) ? favorites.delete(id) : favorites.add(id);
+  store.set("favorites", [...favorites]);
+  updateFavorite(id);
+  if (filter === "fav") applyFilters();
+}
+
+function updateFavorite(id) {
+  const card = cards.get(id);
+  if (!card) return;
+  const isFav = favorites.has(id);
+  card.favBtn.textContent = isFav ? "♥" : "♡";
+  card.favBtn.setAttribute("aria-pressed", String(isFav));
+  card.favBtn.setAttribute("aria-label", (isFav ? "Remover dos favoritos: " : "Adicionar aos favoritos: ") + card.station.name);
+}
+
+// Atualiza o estado do leitor num cartão (ativo, "EM DIRETO"/"A ligar…", botão Ouvir/Pausar).
+function updateCard(id) {
+  const card = cards.get(id);
+  if (!card) return;
+  const active = !!current && current.id === id;
+  const busy = active && (status === "playing" || status === "loading");
+  card.li.classList.toggle("active", active);
+  card.statusEl.hidden = !busy;
+  card.statusEl.className = active && status === "playing" ? "live" : "meta";
+  card.statusEl.textContent = active && status === "playing" ? "🔴 EM DIRETO" : "A ligar…";
+  card.playBtn.textContent = busy ? "⏸ Pausar" : "▶ Ouvir";
+  card.playBtn.setAttribute("aria-label", (busy ? "Pausar " : "Ouvir ") + card.station.name);
+}
+
+// Chamado a cada mudança do leitor: só toca no cartão que deixou de estar ativo e no atual.
+function updatePlayerCards() {
+  const currentId = current ? current.id : null;
+  if (shownActiveId && shownActiveId !== currentId) updateCard(shownActiveId);
+  shownActiveId = currentId;
+  if (currentId) updateCard(currentId);
+}
+
+$("search").addEventListener("input", (e) => { query = normalize(e.target.value.trim()); applyFilters(); });
 
 /* ---------- Arranque ---------- */
 applyTheme();
 applyVolume();
 renderFilters();
+buildCards();
+applyFilters();
 const last = STATIONS.find((s) => s.id === store.get("lastStationId") && s.enabled);
 if (last) { // mostra a última rádio no leitor, sem tocar automaticamente
   current = last;
