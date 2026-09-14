@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rádios Portugal Live</title>
+<meta name="description" content="Rádio portuguesa, em direto.">
+<meta name="theme-color" content="#0b6e4f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Rádios PT">
 <style>
   :root {
     --bg: #f6f5f2; --surface: #ffffff; --text: #1c1b19; --muted: #66625b;
@@ -362,6 +368,12 @@ if (last) { // mostra a última rádio no leitor, sem tocar automaticamente
 }
 setStatus(current ? "paused" : "idle");
 if (current) $("pStatus").textContent = "Última rádio ouvida";
+
+/* ---------- App instalável (PWA) ---------- */
+// Só funciona via http(s); ao abrir o ficheiro com duplo clique é ignorado.
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 </script>
 </body>
 </html>
