@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rádios Portugal Live</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --surface: #ffffff; --text: #1c1b19; --muted: #66625b;
+    --border: #e2dfd8; --accent: #0b6e4f; --accent-text: #ffffff; --live: #c62828;
+    --chip: #ecebe6;
+  }
+  :root[data-theme="dark"] {
+    --bg: #121412; --surface: #1c1f1c; --text: #eceae4; --muted: #a5a29a;
+    --border: #2f332f; --accent: #3ccf95; --accent-text: #0b1a13; --live: #ff6b6b;
+    --chip: #262a26;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); padding-bottom: 150px;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 0 12px; }
+  h1 { margin: 0; font-size: 1.5rem; }
+  .subtitle { margin: 2px 0 0; color: var(--muted); }
+  .theme-btn { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 8px 14px; min-height: 44px; }
+
+  .search { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); min-height: 44px; }
+  .filters { display: flex; gap: 8px; overflow-x: auto; padding: 12px 0; }
+  .filters button { flex: none; border: 1px solid var(--border); background: var(--chip); border-radius: 999px; padding: 8px 14px; min-height: 40px; }
+  .filters button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+
+  .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card-top { display: flex; gap: 10px; align-items: center; }
+  .avatar { flex: none; width: 48px; height: 48px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: .85rem; color: #fff; }
+  .name { margin: 0; font-size: 1rem; font-weight: 650; }
+  .meta { margin: 0; color: var(--muted); font-size: .85rem; }
+  .live { color: var(--live); font-weight: 700; font-size: .8rem; letter-spacing: .03em; }
+  .actions { display: flex; gap: 6px; align-items: center; margin-top: auto; }
+  .icon-btn { border: 1px solid var(--border); background: transparent; border-radius: 10px; min-width: 44px; min-height: 44px; font-size: 1.1rem; }
+  .fav[aria-pressed="true"] { color: var(--live); }
+  .play-btn { flex: 1; border: 0; background: var(--accent); color: var(--accent-text); border-radius: 10px; min-height: 44px; font-weight: 600; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+
+  .player { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--border); }
+  .player .wrap { display: flex; align-items: center; gap: 12px; padding-top: 10px; padding-bottom: 10px; flex-wrap: wrap; }
+  .player-info { flex: 1 1 180px; min-width: 0; display: flex; align-items: center; gap: 10px; }
+  .player-info .avatar { width: 40px; height: 40px; }
+  .player-name { margin: 0; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status { margin: 0; font-size: .85rem; color: var(--muted); }
+  .status.error { color: var(--live); }
+  .volume { display: flex; align-items: center; gap: 6px; }
+  .volume input { width: 120px; accent-color: var(--accent); }
+  .error-actions { display: flex; gap: 6px; }
+  .error-actions button { border: 1px solid var(--border); background: var(--chip); border-radius: 10px; padding: 6px 12px; min-height: 40px; }
+
+  .toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 16px; border-radius: 999px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .card, .filters button { transition: border-color .15s, background-color .15s; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Rádios Portugal Live</h1>
+      <p class="subtitle">Rádio portuguesa, em direto.</p>
+    </div>
+    <button id="themeBtn" class="theme-btn" type="button" aria-label="Mudar tema"></button>
+  </header>
+
+  <label for="search" class="sr-only">Pesquisar rádio</label>
+  <input id="search" class="search" type="search" placeholder="🔎 Pesquisar rádio, cidade, região, género…" autocomplete="off">
+
+  <nav id="filters" class="filters" aria-label="Filtros"></nav>
+
+  <main>
+    <ul id="grid" class="grid"></ul>
+    <div id="empty" class="empty" hidden>
+      <p><strong>Nenhuma rádio encontrada.</strong><br>Experimente outro nome, cidade ou género.</p>
+    </div>
+  </main>
+</div>
+
+<section class="player" aria-label="Leitor">
+  <div class="wrap">
+    <div class="player-info">
+      <div id="pAvatar" class="avatar" aria-hidden="true">♪</div>
+      <div style="min-width:0">
+        <p id="pName" class="player-name">Escolha uma rádio</p>
+        <p id="pStatus" class="status" role="status" aria-live="polite"></p>
+      </div>
+    </div>
+    <div id="pErrorActions" class="error-actions" hidden>
+      <button id="retryBtn" type="button">Tentar novamente</button>
+      <button id="siteBtn" type="button">Abrir site da rádio</button>
+    </div>
+    <button id="pPlay" class="icon-btn" type="button" aria-label="Reproduzir" disabled>▶</button>
+    <div class="volume">
+      <button id="muteBtn" class="icon-btn" type="button" aria-label="Silenciar">🔊</button>
+      <label for="vol" class="sr-only">Volume</label>
+      <input id="vol" type="range" min="0" max="100" step="1">
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<audio id="audio" preload="none"></audio>
+
+<script>
+/* =========================================================
+   LISTA DE RÁDIOS — edite aqui para adicionar/remover.
+   category: music | news | sports | general | regional | thematic
+   streamType: mp3 | aac | hls
+   enabled: false esconde a rádio (ex.: stream deixou de funcionar)
+   ========================================================= */
+const STATIONS = [
+  { id: "radio-comercial", name: "Rádio Comercial", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/comercial.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://radiocomercial.pt", enabled: true },
+  { id: "rfm", name: "RFM", region: "Portugal", category: "music", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/RFMAAC.aac", streamType: "aac", codec: "AAC", website: "https://rfm.sapo.pt", enabled: true },
+  { id: "m80", name: "M80 Rádio", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/m80.aac", streamType: "aac", codec: "AAC", bitrate: 128, website: "https://m80.pt", enabled: true },
+  { id: "renascenca", name: "Rádio Renascença", region: "Portugal", category: "general", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/RADIO_RENASCENCA_SC", streamType: "mp3", website: "https://rr.pt", enabled: true },
+  { id: "antena-1", name: "Antena 1", region: "Portugal", category: "general", streamUrl: "https://radiocast.rtp.pt/antena180a.mp3", streamType: "mp3", codec: "MP3", website: "https://www.rtp.pt/antena1", enabled: true },
+  { id: "antena-2", name: "Antena 2", region: "Portugal", category: "music", streamUrl: "https://radiocast.rtp.pt/antena280a.mp3", streamType: "mp3", codec: "MP3", website: "https://www.rtp.pt/antena2", enabled: true },
+  { id: "antena-3", name: "Antena 3", region: "Portugal", category: "music", streamUrl: "https://radiocast.rtp.pt/antena380a.mp3", streamType: "mp3", codec: "MP3", website: "https://www.rtp.pt/antena3", enabled: true },
+  { id: "tsf", name: "TSF", region: "Portugal", category: "news", streamUrl: "https://directo.tsf.pt/tsfdirecto.mp3", streamType: "mp3", codec: "MP3", website: "https://www.tsf.pt", enabled: true },
+  { id: "observador", name: "Rádio Observador", region: "Portugal", category: "news", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/OBSERVADORAAC_SC", streamType: "aac", codec: "AAC", website: "https://observador.pt/radio", enabled: true },
+  { id: "mega-hits", name: "Mega Hits", region: "Portugal", category: "music", streamUrl: "https://playerservices.streamtheworld.com/api/livestream-redirect/MEGA_HITS_SC", streamType: "mp3", website: "https://megahits.sapo.pt", enabled: true },
+  { id: "cidade-fm", name: "Cidade FM", region: "Portugal", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/cidade.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://cidade.fm", enabled: true },
+  { id: "smooth-fm", name: "Smooth FM", region: "Lisboa", category: "music", streamUrl: "https://stream-icy.bauermedia.pt/smooth.mp3", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://smoothfm.iol.pt", enabled: true },
+  { id: "cm-radio", name: "CM Rádio", region: "Portugal", category: "news", streamUrl: "https://emdireto.cmradio.pt/audio2/output-stream_1.m3u8", streamType: "hls", codec: "HLS", website: "https://www.cmjornal.pt/cm-radio", enabled: true },
+  { id: "nova-era", name: "Rádio Nova Era", city: "Porto", region: "Norte", category: "music", streamUrl: "https://centova.radio.com.pt/proxy/478?mp=/stream", streamType: "mp3", codec: "MP3", website: "https://www.radio-nova-era.pt", enabled: true },
+  { id: "radio-marginal", name: "Rádio Marginal", region: "Lisboa", category: "music", streamUrl: "https://centova.radios.pt/proxy/499?mp=/stream", streamType: "mp3", codec: "MP3", bitrate: 128, website: "https://marginal.fm", enabled: true },
+  { id: "radio-amalia", name: "Rádio Amália", city: "Lisboa", region: "Lisboa", category: "music", streamUrl: "https://centova.radios.pt/proxy/496?mp=/stream/1/", streamType: "mp3", codec: "MP3", website: "https://radioamalia.pt", enabled: true },
+  { id: "golo-fm", name: "Golo FM", region: "Portugal", category: "sports", streamUrl: "https://sp0.redeaudio.com/8154/stream", streamType: "mp3", codec: "MP3", website: "https://golofm.pt", enabled: true },
+  { id: "radio-regional", name: "Rádio Regional", region: "Portugal", category: "regional", streamUrl: "https://play.radioregional.pt/stream/1/", streamType: "mp3", codec: "MP3", website: "https://radioregional.pt", enabled: true },
+  { id: "radio-calheta", name: "Rádio Calheta", region: "Madeira", category: "regional", streamUrl: "https://player.radiocalheta.pt/listen/radiocalheta/live", streamType: "mp3", codec: "MP3", website: "https://radiocalheta.pt", enabled: true },
+  { id: "radio-clube-madeira", name: "Rádio Clube Madeira", region: "Madeira", category: "regional", streamUrl: "https://audio.serv.pt/8020/stream.mp3", streamType: "mp3", codec: "MP3", enabled: true },
+  { id: "rua-fm", name: "RUA FM", city: "Faro", region: "Algarve", category: "regional", streamUrl: "https://centova.radio.com.pt/proxy/037?mp=/stream", streamType: "mp3", codec: "MP3", website: "https://rua.pt", enabled: true },
+
+  // Canais temáticos
+  { id: "m80-80s", name: "M80 80s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8080.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
+  { id: "m80-90s", name: "M80 90s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8090.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
+  { id: "m80-70s", name: "M80 70s", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m8070.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
+  { id: "m80-ballads", name: "M80 Ballads", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80ballads.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
+  { id: "m80-dance", name: "M80 Dance", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80dance.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
+  { id: "m80-portugal", name: "M80 Portugal", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/m80nacional.aac", streamType: "aac", codec: "AAC", website: "https://m80.pt", enabled: true },
+  { id: "comercial-rock", name: "Rádio Comercial Rock", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/rcrock.aac", streamType: "aac", codec: "AAC", website: "https://radiocomercial.pt", enabled: true },
+  { id: "comercial-portugal", name: "Rádio Comercial Portugal", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/rctuga.aac", streamType: "aac", codec: "AAC", website: "https://radiocomercial.pt", enabled: true },
+  { id: "smooth-soul", name: "Smooth FM Soul", category: "thematic", streamUrl: "https://stream-icy.bauermedia.pt/smoothsoul.aac", streamType: "aac", codec: "AAC", website: "https://smoothfm.iol.pt", enabled: true },
+];
+
+const CATEGORY_LABELS = { music: "Música", news: "Notícias", sports: "Desporto", general: "Generalista", regional: "Regional", thematic: "Temáticas" };
+const FILTERS = [["all", "Todas"], ["fav", "Favoritas"], ...Object.entries(CATEGORY_LABELS)];
+
+/* ---------- Preferências (localStorage) ---------- */
+const store = {
+  get(key, fallback) { try { const v = localStorage.getItem("radiospt." + key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; } },
+  set(key, value) { try { localStorage.setItem("radiospt." + key, JSON.stringify(value)); } catch {} },
+};
+let favorites = new Set(store.get("favorites", []));
+let theme = store.get("theme", "system");
+let volume = store.get("volume", 80);
+let muted = store.get("muted", false);
+let filter = "all";
+let query = "";
+
+/* ---------- Utilitários ---------- */
+const $ = (id) => document.getElementById(id);
+const normalize = (s) => (s || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function initials(name) {
+  const words = name.split(/\s+/);
+  if (words.length === 1 || /\d/.test(words[0])) return words[0].slice(0, 3).toUpperCase(); // TSF, M80
+  return words.map((w) => w[0]).join("").slice(0, 3).toUpperCase();                        // RC
+}
+function avatarColor(id) { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 45% 38%)`; }
+function describe(s) { return [s.city, s.region].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(" · ") || "Portugal"; }
+function techInfo(s) { return [s.codec, s.bitrate && s.bitrate + " kbps"].filter(Boolean).join(" · "); }
+
+function matches(s) {
+  if (filter === "fav" && !favorites.has(s.id)) return false;
+  if (filter !== "all" && filter !== "fav" && s.category !== filter) return false;
+  if (!query) return true;
+  const hay = normalize([s.name, s.city, s.region, s.frequency, CATEGORY_LABELS[s.category], s.category].join(" "));
+  return hay.includes(query);
+}
+
+/* ---------- Tema ---------- */
+const themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+function applyTheme() {
+  const dark = theme === "dark" || (theme === "system" && themeMedia.matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  $("themeBtn").textContent = { system: "🖥 Sistema", light: "☀ Claro", dark: "🌙 Escuro" }[theme];
+}
+$("themeBtn").onclick = () => { theme = { system: "light", light: "dark", dark: "system" }[theme]; store.set("theme", theme); applyTheme(); };
+themeMedia.addEventListener("change", applyTheme);
+
+/* ---------- Player (um único stream de cada vez) ---------- */
+const audio = $("audio");
+let current = null;   // estação selecionada
+let status = "idle";  // idle | loading | playing | paused | error
+
+function setStatus(next) {
+  status = next;
+  const el = $("pStatus");
+  el.classList.toggle("error", next === "error");
+  el.textContent = {
+    idle: "", loading: "A ligar…", playing: "🔴 Em direto", paused: "Em pausa",
+    error: "Não foi possível ligar a esta rádio. O stream pode estar temporariamente indisponível.",
+  }[next];
+  $("pErrorActions").hidden = next !== "error";
+  $("siteBtn").hidden = !(current && current.website);
+  const playing = next === "playing" || next === "loading";
+  $("pPlay").textContent = playing ? "⏸" : "▶";
+  $("pPlay").setAttribute("aria-label", playing ? "Pausar" : "Reproduzir");
+  $("pPlay").disabled = !current;
+  render();
+}
+
+function stopStream() {
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load(); // liberta a ligação ao stream anterior
+}
+
+function play(station) {
+  stopStream();
+  current = station;
+  store.set("lastStationId", station.id);
+  $("pName").textContent = station.name;
+  const av = $("pAvatar");
+  av.textContent = initials(station.name);
+  av.style.background = avatarColor(station.id);
+
+  if (station.streamType === "hls" && !audio.canPlayType("application/vnd.apple.mpegurl")) {
+    setStatus("error");
+    $("pStatus").textContent = "Este browser não reproduz streams HLS nativamente. Copie o URL e use o VLC.";
+    return;
+  }
+  audio.src = station.streamUrl;
+  setStatus("loading");
+  audio.play().catch((err) => { if (err.name !== "AbortError") setStatus("error"); });
+}
+
+function togglePlay(station) {
+  if (current && current.id === station.id && (status === "playing" || status === "loading")) {
+    audio.pause();
+    stopStream();          // rádio em direto: ao retomar volta ao "agora"
+    setStatus("paused");
+  } else {
+    play(station);
+  }
+}
+
+audio.addEventListener("loadstart", () => { if (audio.getAttribute("src")) setStatus("loading"); });
+audio.addEventListener("waiting", () => setStatus("loading"));
+audio.addEventListener("stalled", () => { if (status !== "playing") setStatus("loading"); });
+audio.addEventListener("playing", () => setStatus("playing"));
+audio.addEventListener("error", () => { if (audio.getAttribute("src")) setStatus("error"); });
+
+$("pPlay").onclick = () => current && togglePlay(current);
+$("retryBtn").onclick = () => current && play(current);
+$("siteBtn").onclick = () => current && current.website && window.open(current.website, "_blank", "noopener");
+
+/* ---------- Volume ---------- */
+function applyVolume() {
+  audio.volume = volume / 100;
+  audio.muted = muted;
+  $("vol").value = volume;
+  $("muteBtn").textContent = muted || volume === 0 ? "🔇" : "🔊";
+  $("muteBtn").setAttribute("aria-label", muted ? "Ativar som" : "Silenciar");
+}
+$("vol").oninput = (e) => { volume = Number(e.target.value); muted = false; store.set("volume", volume); store.set("muted", muted); applyVolume(); };
+$("muteBtn").onclick = () => { muted = !muted; store.set("muted", muted); applyVolume(); };
+
+/* ---------- Copiar URL ---------- */
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 2000); }
+async function copyUrl(station) {
+  try { await navigator.clipboard.writeText(station.streamUrl); toast("URL copiado"); }
+  catch { window.prompt("Copie o URL do stream:", station.streamUrl); }
+}
+
+/* ---------- Interface ---------- */
+function renderFilters() {
+  const nav = $("filters");
+  nav.replaceChildren(...FILTERS.map(([key, label]) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = label;
+    b.setAttribute("aria-pressed", String(filter === key));
+    b.onclick = () => { filter = key; renderFilters(); render(); };
+    return b;
+  }));
+}
+
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "attrs") for (const [a, av] of Object.entries(v)) e.setAttribute(a, av);
+    else e[k] = v;
+  }
+  e.append(...children);
+  return e;
+}
+
+function render() {
+  const list = STATIONS.filter((s) => s.enabled && matches(s)).sort((a, b) => a.name.localeCompare(b.name, "pt"));
+  $("empty").hidden = list.length > 0;
+  $("grid").replaceChildren(...list.map((s) => {
+    const active = current && current.id === s.id;
+    const isPlaying = active && (status === "playing" || status === "loading");
+    const isFav = favorites.has(s.id);
+    const avatar = el("div", { className: "avatar", textContent: initials(s.name), attrs: { "aria-hidden": "true" } });
+    avatar.style.background = avatarColor(s.id);
+
+    const info = el("div", {}, [
+      el("p", { className: "name", textContent: s.name }),
+      el("p", { className: "meta", textContent: describe(s) + (s.frequency ? " · " + s.frequency : "") }),
+    ]);
+    const details = [el("p", { className: "meta", textContent: [CATEGORY_LABELS[s.category], techInfo(s)].filter(Boolean).join(" · ") })];
+    if (active && status === "playing") details.push(el("span", { className: "live", textContent: "🔴 EM DIRETO" }));
+    if (active && status === "loading") details.push(el("span", { className: "meta", textContent: "A ligar…" }));
+
+    return el("li", { className: "card" + (active ? " active" : "") }, [
+      el("div", { className: "card-top" }, [avatar, info]),
+      ...details,
+      el("div", { className: "actions" }, [
+        el("button", { type: "button", className: "icon-btn fav", textContent: isFav ? "♥" : "♡",
+          attrs: { "aria-pressed": String(isFav), "aria-label": (isFav ? "Remover dos favoritos: " : "Adicionar aos favoritos: ") + s.name },
+          onclick: () => { isFav ? favorites.delete(s.id) : favorites.add(s.id); store.set("favorites", [...favorites]); render(); } }),
+        el("button", { type: "button", className: "icon-btn", textContent: "⧉", title: "Copiar URL do stream",
+          attrs: { "aria-label": "Copiar URL do stream: " + s.name }, onclick: () => copyUrl(s) }),
+        el("button", { type: "button", className: "play-btn", textContent: isPlaying ? "⏸ Pausar" : "▶ Ouvir",
+          attrs: { "aria-label": (isPlaying ? "Pausar " : "Ouvir ") + s.name }, onclick: () => togglePlay(s) }),
+      ]),
+    ]);
+  }));
+}
+
+$("search").addEventListener("input", (e) => { query = normalize(e.target.value.trim()); render(); });
+
+/* ---------- Arranque ---------- */
+applyTheme();
+applyVolume();
+renderFilters();
+const last = STATIONS.find((s) => s.id === store.get("lastStationId") && s.enabled);
+if (last) { // mostra a última rádio no leitor, sem tocar automaticamente
+  current = last;
+  $("pName").textContent = last.name;
+  $("pAvatar").textContent = initials(last.name);
+  $("pAvatar").style.background = avatarColor(last.id);
+}
+setStatus(current ? "paused" : "idle");
+if (current) $("pStatus").textContent = "Última rádio ouvida";
+</script>
+</body>
+</html>
