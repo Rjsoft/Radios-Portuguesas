@@ -375,7 +375,7 @@ function play(station) {
     }
     const player = new Hls({ enableWorker: true });
     hlsInstance = player;
-    player.on(Hls.Events.MEDIA_ATTACHED, () => {
+    player.on(Hls.Events.MANIFEST_PARSED, () => {
       if (attempt === playAttempt) startAudio();
     });
     player.on(Hls.Events.ERROR, (_event, data) => {
