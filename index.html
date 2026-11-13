@@ -291,13 +291,20 @@ function loadHlsLibrary() {
 }
 
 function showPlaybackError(message) {
+  ++playAttempt; // rejeita callbacks assíncronos de uma reprodução que falhou
+  stopStream();
   setStatus("error");
   if (message) $("pStatus").textContent = message;
 }
 
 function startConnectTimer() {
   clearTimeout(connectTimer);
-  connectTimer = setTimeout(() => { if (status === "loading") { stopStream(); setStatus("error"); } }, CONNECT_TIMEOUT_MS);
+  const attempt = playAttempt;
+  connectTimer = setTimeout(() => {
+    if (attempt === playAttempt && status === "loading") {
+      showPlaybackError("A ligação demorou demasiado tempo. Tente novamente.");
+    }
+  }, CONNECT_TIMEOUT_MS);
 }
 
 function setStatus(next) {
@@ -356,7 +363,9 @@ function play(station) {
 
   const startAudio = () => {
     audio.play().catch((err) => {
-      if (attempt === playAttempt && err.name !== "AbortError") showPlaybackError();
+      if (attempt === playAttempt && err.name !== "AbortError") {
+        showPlaybackError("Não foi possível iniciar o áudio. Tente novamente.");
+      }
     });
   };
 
@@ -382,7 +391,6 @@ function play(station) {
       if (attempt !== playAttempt || !data.fatal) return;
       // Erros não fatais são recuperados internamente pela biblioteca.
       showPlaybackError("A ligação HLS falhou. Tente novamente ou abra o site da rádio.");
-      stopStream();
     });
     player.loadSource(station.streamUrl);
     player.attachMedia(audio);
@@ -403,15 +411,25 @@ function togglePlay(station) {
 }
 
 audio.addEventListener("loadstart", () => { if (audio.getAttribute("src")) setStatus("loading"); });
-audio.addEventListener("waiting", () => setStatus("loading"));
-audio.addEventListener("stalled", () => { if (status !== "playing") setStatus("loading"); });
-audio.addEventListener("playing", () => setStatus("playing"));
-audio.addEventListener("error", () => { if (audio.getAttribute("src")) setStatus("error"); });
+audio.addEventListener("waiting", () => {
+  if (current && (status === "playing" || status === "loading")) setStatus("loading");
+});
+audio.addEventListener("stalled", () => {
+  if (current && (status === "playing" || status === "loading")) setStatus("loading");
+});
+audio.addEventListener("playing", () => {
+  if (current && status === "loading") setStatus("playing");
+});
+audio.addEventListener("error", () => {
+  if (current && (status === "playing" || status === "loading")) showPlaybackError();
+});
 // Pausa vinda de fora da app (chamada, auscultadores, teclas multimédia). As pausas pedidas pela
 // própria app já mudaram o estado, ou o áudio já voltou a tocar (audio.paused === false).
 audio.addEventListener("pause", () => { if (audio.paused && (status === "playing" || status === "loading")) setStatus("paused"); });
 // Um stream em direto não deve terminar: se terminar, a ligação caiu.
-audio.addEventListener("ended", () => { if (audio.getAttribute("src") && status !== "paused") setStatus("error"); });
+audio.addEventListener("ended", () => {
+  if (current && (status === "playing" || status === "loading")) showPlaybackError();
+});
 
 /* ---------- Ecrã de bloqueio / teclas multimédia (Media Session) ---------- */
 const isBusy = () => status === "playing" || status === "loading";
