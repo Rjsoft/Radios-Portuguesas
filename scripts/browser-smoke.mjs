@@ -103,6 +103,32 @@ try {
     } finally { await page.close(); }
   });
 
+  await test("HLS sem suporte nativo inicia via hls.js simulado", async () => {
+    const page = await launchPage();
+    try {
+      await page.evaluate(() => {
+        class FakeHls {
+          static Events = { MANIFEST_PARSED: "manifest", ERROR: "error" };
+          static isSupported() { return true; }
+          handlers = {};
+          on(name, fn) { this.handlers[name] = fn; }
+          loadSource() {}
+          attachMedia() { queueMicrotask(() => this.handlers.manifest?.()); }
+          destroy() {}
+        }
+        window.Hls = FakeHls;
+      });
+      await page.locator("#search").fill("CM Rádio");
+      await page.locator("#grid > li:visible .play-btn").click();
+      await page.waitForFunction(() => window.__pendingPlays.length === 1);
+      await page.evaluate(() => {
+        window.__pendingPlays[0].resolve();
+        document.querySelector("#audio").dispatchEvent(new Event("playing"));
+      });
+      assert.match(await page.locator("#pStatus").innerText(), /Em direto/);
+    } finally { await page.close(); }
+  });
+
   await test("bloqueio por autoplay produz mensagem específica", async () => {
     const page = await launchPage();
     try {
