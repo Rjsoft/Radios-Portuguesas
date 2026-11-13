@@ -267,6 +267,7 @@ let current = null;   // estação selecionada
 let status = "idle";  // idle | loading | playing | paused | error
 const CONNECT_TIMEOUT_MS = 15000; // tempo máximo em "A ligar…" antes de mostrar erro
 let connectTimer;
+let playAttempt = 0; // identifica a tentativa atual e ignora erros de tentativas anteriores
 
 function startConnectTimer() {
   clearTimeout(connectTimer);
@@ -313,6 +314,7 @@ function stopStream() {
 }
 
 function play(station) {
+  const attempt = ++playAttempt;
   stopStream();
   current = station;
   store.set("lastStationId", station.id);
@@ -327,7 +329,10 @@ function play(station) {
   audio.src = station.streamUrl;
   setStatus("loading");
   startConnectTimer(); // nova rádio: o prazo recomeça, mesmo que a anterior ainda estivesse a ligar
-  audio.play().catch((err) => { if (err.name !== "AbortError") setStatus("error"); });
+  audio.play().catch((err) => {
+    // Ao mudar rapidamente de rádio, a rejeição de um play() antigo não deve afetar a nova reprodução.
+    if (attempt === playAttempt && err.name !== "AbortError") setStatus("error");
+  });
 }
 
 function togglePlay(station) {
