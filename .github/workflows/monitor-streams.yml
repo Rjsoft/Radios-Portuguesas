@@ -72,9 +72,9 @@ jobs:
           fi
           if [ -f relatorio-hls.txt ]; then
             echo '### HLS e CORS' >> "$GITHUB_STEP_SUMMARY"
-            echo '\`\`\`text' >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
             tail -n 14 relatorio-hls.txt >> "$GITHUB_STEP_SUMMARY"
-            echo '\`\`\`' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ -f relatorio-streams.txt ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
