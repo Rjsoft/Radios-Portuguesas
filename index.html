@@ -270,6 +270,36 @@ let connectTimer;
 let playAttempt = 0; // identifica a tentativa atual e ignora erros de tentativas anteriores
 let hlsInstance = null;
 let hlsScriptPromise = null;
+const HLS_RECOVERY_LIMIT = 2; // tentativas automáticas adicionais por reprodução
+const HLS_BUFFER_RECOVERY_MS = 10000;
+let hlsRecoveryCount = 0;
+let hlsHadAudio = false;
+let hlsBufferTimer;
+
+// Stream HLS: se o áudio cair depois de ter tocado, tenta voltar ao direto.
+// Nunca reinicia uma rádio diferente nem sobrepõe duas ligações.
+function recoverHls(attempt, reason) {
+  if (attempt !== playAttempt || current?.streamType !== "hls" ||
+      (status !== "playing" && status !== "loading")) return;
+  clearTimeout(hlsBufferTimer);
+  hlsBufferTimer = null;
+  if (hlsRecoveryCount >= HLS_RECOVERY_LIMIT) {
+    showPlaybackError("A transmissão da CM Rádio está instável. Tente novamente ou abra o site da rádio.");
+    return;
+  }
+  hlsRecoveryCount++;
+  console.warn("A recuperar transmissão HLS:", reason, "tentativa", hlsRecoveryCount);
+  play(current, true);
+}
+function scheduleHlsBufferRecovery() {
+  if (current?.streamType !== "hls" || !hlsHadAudio || hlsBufferTimer) return;
+  const attempt = playAttempt;
+  hlsBufferTimer = setTimeout(() => {
+    hlsBufferTimer = null;
+    if (attempt === playAttempt && status === "loading") recoverHls(attempt, "buffering prolongado");
+  }, HLS_BUFFER_RECOVERY_MS);
+}
+
 const HLS_LIBRARY_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js";
 const HLS_LIBRARY_INTEGRITY = "sha384-p9vgU/7IYJWd3I4STrtqxqR/2cAQlhIX7D/HrTnIMEjjcUox165b7se7sxmm3zDg";
 
@@ -344,6 +374,8 @@ function liveDot() {
 }
 
 function stopStream() {
+  clearTimeout(hlsBufferTimer);
+  hlsBufferTimer = null;
   if (hlsInstance) {
     hlsInstance.destroy();
     hlsInstance = null;
@@ -353,7 +385,9 @@ function stopStream() {
   audio.load(); // liberta a ligação ao stream anterior
 }
 
-function play(station) {
+function play(station, recovering = false) {
+  if (!recovering) hlsRecoveryCount = 0; // nova seleção ou repetição manual
+  hlsHadAudio = false;
   const attempt = ++playAttempt;
   stopStream();
   current = station;
@@ -400,7 +434,7 @@ function play(station) {
       if (attempt !== playAttempt || !data.fatal) return;
       // Metadados técnicos para diagnóstico sem expor parâmetros de URLs dos streams.
       console.warn("HLS fatal:", data.type, data.details, data.response?.code ?? "");
-      showPlaybackError("A ligação HLS falhou. Tente novamente ou abra o site da rádio.");
+      recoverHls(attempt, data.type || "erro fatal");
     });
     player.loadSource(station.streamUrl);
     player.attachMedia(audio);
@@ -422,13 +456,24 @@ function togglePlay(station) {
 
 audio.addEventListener("loadstart", () => { if (audio.getAttribute("src")) setStatus("loading"); });
 audio.addEventListener("waiting", () => {
-  if (current && (status === "playing" || status === "loading")) setStatus("loading");
+  if (current && (status === "playing" || status === "loading")) {
+    setStatus("loading");
+    scheduleHlsBufferRecovery();
+  }
 });
 audio.addEventListener("stalled", () => {
-  if (current && (status === "playing" || status === "loading")) setStatus("loading");
+  if (current && (status === "playing" || status === "loading")) {
+    setStatus("loading");
+    scheduleHlsBufferRecovery();
+  }
 });
 audio.addEventListener("playing", () => {
-  if (current && status === "loading") setStatus("playing");
+  if (current && (status === "loading" || status === "playing")) {
+    clearTimeout(hlsBufferTimer);
+    hlsBufferTimer = null;
+    if (current.streamType === "hls") hlsHadAudio = true;
+    if (status === "loading") setStatus("playing");
+  }
 });
 audio.addEventListener("error", () => {
   if (current && (status === "playing" || status === "loading")) showPlaybackError();
