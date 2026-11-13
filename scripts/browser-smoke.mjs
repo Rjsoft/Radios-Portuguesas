@@ -129,6 +129,70 @@ try {
     } finally { await page.close(); }
   });
 
+  await test("falha fatal de HLS termina o stream e oferece nova tentativa", async () => {
+    const page = await launchPage();
+    try {
+      await page.evaluate(() => {
+        class FakeHls {
+          static Events = { MANIFEST_PARSED: "manifest", ERROR: "error" };
+          static isSupported() { return true; }
+          constructor() { window.__fakeHls = this; }
+          handlers = {};
+          on(name, fn) { this.handlers[name] = fn; }
+          loadSource() {}
+          attachMedia() {}
+          destroy() { this.destroyed = true; }
+        }
+        window.Hls = FakeHls;
+      });
+      await page.locator("#search").fill("CM Rádio");
+      await page.locator("#grid > li:visible .play-btn").click();
+      await page.waitForFunction(() => !!window.__fakeHls);
+      await page.evaluate(() => window.__fakeHls.handlers.error(null, { fatal: true, type: "networkError" }));
+      assert.match(await page.locator("#pStatus").innerText(), /ligação HLS falhou/);
+      assert.equal(await page.locator("#retryBtn").isVisible(), true);
+      assert.equal(await page.evaluate(() => window.__fakeHls.destroyed), true);
+    } finally { await page.close(); }
+  });
+
+  await test("pausar durante carregamento HLS impede reprodução atrasada", async () => {
+    const page = await launchPage();
+    try {
+      await page.evaluate(() => {
+        class FakeHls {
+          static Events = { MANIFEST_PARSED: "manifest", ERROR: "error" };
+          static isSupported() { return true; }
+          constructor() { window.__fakeHls = this; }
+          handlers = {};
+          on(name, fn) { this.handlers[name] = fn; }
+          loadSource() {}
+          attachMedia() {}
+          destroy() {}
+        }
+        window.Hls = FakeHls;
+      });
+      await page.locator("#search").fill("CM Rádio");
+      const button = page.locator("#grid > li:visible .play-btn");
+      await button.click();
+      await page.waitForFunction(() => !!window.__fakeHls);
+      await button.click();
+      await page.evaluate(() => window.__fakeHls.handlers.manifest());
+      assert.equal(await page.locator("#pStatus").innerText(), "Em pausa");
+      assert.equal(await page.evaluate(() => window.__pendingPlays.length), 0);
+    } finally { await page.close(); }
+  });
+
+  await test("timeout de ligação mostra erro e permite repetir", async () => {
+    const page = await launchPage();
+    try {
+      await page.clock.install();
+      await page.locator("#grid > li .play-btn").first().click();
+      await page.clock.fastForward(16000);
+      assert.match(await page.locator("#pStatus").innerText(), /demorou demasiado tempo/);
+      assert.equal(await page.locator("#retryBtn").isVisible(), true);
+    } finally { await page.close(); }
+  });
+
   await test("bloqueio por autoplay produz mensagem específica", async () => {
     const page = await launchPage();
     try {
