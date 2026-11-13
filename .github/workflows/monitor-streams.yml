@@ -6,6 +6,7 @@ on:
     paths:
       - 'index.html'
       - 'scripts/check-streams.mjs'
+      - 'scripts/check-hls-cors.mjs'
       - '.github/workflows/monitor-streams.yml'
   schedule:
     - cron: '17 7 * * 1'
@@ -32,12 +33,21 @@ jobs:
         run: |
           set -o pipefail
           node scripts/check-streams.mjs 2>&1 | tee relatorio-streams.txt
+      - name: Diagnosticar manifesto, segmentos e CORS HLS
+        id: hls
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/check-hls-cors.mjs 2>&1 | tee relatorio-hls.txt
       - name: Guardar relatório (incluindo falhas)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: relatorio-streams
-          path: relatorio-streams.txt
+          path: |
+            relatorio-streams.txt
+            relatorio-hls.txt
           if-no-files-found: warn
           retention-days: 30
       - name: Resumo
@@ -45,6 +55,7 @@ jobs:
         shell: bash
         env:
           PROBE_OUTCOME: ${{ steps.probe.outcome }}
+          HLS_OUTCOME: ${{ steps.hls.outcome }}
         run: |
           echo '## Diagnóstico de rádios' >> "$GITHUB_STEP_SUMMARY"
           if [ "$PROBE_OUTCOME" = "failure" ]; then
@@ -54,6 +65,16 @@ jobs:
             echo '✅ O comando de diagnóstico terminou sem falhas nem resultados inconclusivos.' >> "$GITHUB_STEP_SUMMARY"
           else
             echo "⚠️ Resultado do diagnóstico: $PROBE_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$HLS_OUTCOME" = "failure" ]; then
+            echo '⚠️ **Diagnóstico HLS/CORS com falhas ou resultados inconclusivos.**' >> "$GITHUB_STEP_SUMMARY"
+            echo '::warning title=HLS/CORS::Verifique o relatório HLS, manifesto e segmentos.'
+          fi
+          if [ -f relatorio-hls.txt ]; then
+            echo '### HLS e CORS' >> "$GITHUB_STEP_SUMMARY"
+            echo '\`\`\`text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 14 relatorio-hls.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '\`\`\`' >> "$GITHUB_STEP_SUMMARY"
           fi
           if [ -f relatorio-streams.txt ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
