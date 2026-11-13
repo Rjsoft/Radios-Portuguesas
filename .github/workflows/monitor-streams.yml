@@ -1,0 +1,49 @@
+name: Monitorizar streams (diagnóstico)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 7 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verificar streams e criar relatório
+        id: probe
+        # Uma falha pontual não deve eliminar estações nem bloquear entregas.
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/check-streams.mjs 2>&1 | tee relatorio-streams.txt
+      - name: Guardar relatório (incluindo falhas)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-streams
+          path: relatorio-streams.txt
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Resumo
+        if: always()
+        shell: bash
+        run: |
+          echo '## Diagnóstico de rádios' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f relatorio-streams.txt ]; then
+            echo '\`\`\`text' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 12 relatorio-streams.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '\`\`\`' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'O verificador não produziu um relatório.' >> "$GITHUB_STEP_SUMMARY"
+          fi
