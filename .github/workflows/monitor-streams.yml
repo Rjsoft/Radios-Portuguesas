@@ -43,8 +43,18 @@ jobs:
       - name: Resumo
         if: always()
         shell: bash
+        env:
+          PROBE_OUTCOME: ${{ steps.probe.outcome }}
         run: |
           echo '## Diagnóstico de rádios' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$PROBE_OUTCOME" = "failure" ]; then
+            echo '⚠️ **Foram detetados streams falhados ou inconclusivos.** O workflow continua apenas para preservar o relatório.' >> "$GITHUB_STEP_SUMMARY"
+            echo '::warning title=Streams por rever::O diagnóstico devolveu um código de saída diferente de zero. Consulte o relatório.'
+          elif [ "$PROBE_OUTCOME" = "success" ]; then
+            echo '✅ O comando de diagnóstico terminou sem falhas nem resultados inconclusivos.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️ Resultado do diagnóstico: $PROBE_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -f relatorio-streams.txt ]; then
             echo '```text' >> "$GITHUB_STEP_SUMMARY"
             tail -n 12 relatorio-streams.txt >> "$GITHUB_STEP_SUMMARY"
