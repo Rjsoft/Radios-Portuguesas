@@ -1,0 +1,28 @@
+name: Validar catálogo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  catalogo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe dos scripts
+        run: |
+          node --check scripts/check-streams.mjs
+          node --check scripts/validate-catalog.mjs
+      - name: Validar catálogo de rádios
+        run: node scripts/validate-catalog.mjs
