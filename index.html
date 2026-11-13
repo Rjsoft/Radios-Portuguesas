@@ -268,6 +268,32 @@ let status = "idle";  // idle | loading | playing | paused | error
 const CONNECT_TIMEOUT_MS = 15000; // tempo máximo em "A ligar…" antes de mostrar erro
 let connectTimer;
 let playAttempt = 0; // identifica a tentativa atual e ignora erros de tentativas anteriores
+let hlsInstance = null;
+let hlsScriptPromise = null;
+const HLS_LIBRARY_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js";
+
+// Carrega a biblioteca apenas quando necessária (browsers sem HLS nativo).
+function loadHlsLibrary() {
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (hlsScriptPromise) return hlsScriptPromise;
+  hlsScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = HLS_LIBRARY_URL;
+    script.async = true;
+    script.onload = () => window.Hls ? resolve(window.Hls) : reject(new Error("Biblioteca HLS indisponível"));
+    script.onerror = () => reject(new Error("Não foi possível carregar o suporte HLS"));
+    document.head.append(script);
+  }).catch((error) => {
+    hlsScriptPromise = null; // permitir nova tentativa se o CDN estiver temporariamente indisponível
+    throw error;
+  });
+  return hlsScriptPromise;
+}
+
+function showPlaybackError(message) {
+  setStatus("error");
+  if (message) $("pStatus").textContent = message;
+}
 
 function startConnectTimer() {
   clearTimeout(connectTimer);
@@ -308,6 +334,10 @@ function liveDot() {
 }
 
 function stopStream() {
+  if (hlsInstance) {
+    hlsInstance.destroy();
+    hlsInstance = null;
+  }
   audio.pause();
   audio.removeAttribute("src");
   audio.load(); // liberta a ligação ao stream anterior
@@ -321,22 +351,49 @@ function play(station) {
   $("pName").textContent = station.name;
   paintAvatar($("pAvatar"), station);
 
-  if (station.streamType === "hls" && !audio.canPlayType("application/vnd.apple.mpegurl")) {
-    setStatus("error");
-    $("pStatus").textContent = "Este browser não reproduz streams HLS nativamente. Copie o URL e use o VLC.";
-    return;
-  }
-  audio.src = station.streamUrl;
   setStatus("loading");
   startConnectTimer(); // nova rádio: o prazo recomeça, mesmo que a anterior ainda estivesse a ligar
-  audio.play().catch((err) => {
-    // Ao mudar rapidamente de rádio, a rejeição de um play() antigo não deve afetar a nova reprodução.
-    if (attempt === playAttempt && err.name !== "AbortError") setStatus("error");
+
+  const startAudio = () => {
+    audio.play().catch((err) => {
+      if (attempt === playAttempt && err.name !== "AbortError") showPlaybackError();
+    });
+  };
+
+  if (station.streamType !== "hls" || audio.canPlayType("application/vnd.apple.mpegurl")) {
+    audio.src = station.streamUrl;
+    startAudio();
+    return;
+  }
+
+  // HLS sem suporte nativo: hls.js precisa de MediaSource e de CORS no servidor de origem.
+  loadHlsLibrary().then((Hls) => {
+    if (attempt !== playAttempt || current?.id !== station.id || status !== "loading") return;
+    if (!Hls.isSupported()) {
+      showPlaybackError("Este browser não suporta HLS. Abra o stream num leitor externo, como o VLC.");
+      return;
+    }
+    const player = new Hls({ enableWorker: true });
+    hlsInstance = player;
+    player.on(Hls.Events.MEDIA_ATTACHED, () => {
+      if (attempt === playAttempt) startAudio();
+    });
+    player.on(Hls.Events.ERROR, (_event, data) => {
+      if (attempt !== playAttempt || !data.fatal) return;
+      // Erros não fatais são recuperados internamente pela biblioteca.
+      showPlaybackError("A ligação HLS falhou. Tente novamente ou abra o site da rádio.");
+      stopStream();
+    });
+    player.loadSource(station.streamUrl);
+    player.attachMedia(audio);
+  }).catch(() => {
+    if (attempt === playAttempt) showPlaybackError("Não foi possível carregar o suporte HLS. Verifique a ligação e tente novamente.");
   });
 }
 
 function togglePlay(station) {
   if (current && current.id === station.id && (status === "playing" || status === "loading")) {
+    ++playAttempt; // invalida pedidos HLS/play() ainda pendentes
     audio.pause();
     stopStream();          // rádio em direto: ao retomar volta ao "agora"
     setStatus("paused");
