@@ -2,6 +2,11 @@ name: Monitorizar streams (diagnóstico)
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'scripts/check-streams.mjs'
+      - '.github/workflows/monitor-streams.yml'
   schedule:
     - cron: '17 7 * * 1'
 
@@ -41,9 +46,9 @@ jobs:
         run: |
           echo '## Diagnóstico de rádios' >> "$GITHUB_STEP_SUMMARY"
           if [ -f relatorio-streams.txt ]; then
-            echo '\`\`\`text' >> "$GITHUB_STEP_SUMMARY"
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
             tail -n 12 relatorio-streams.txt >> "$GITHUB_STEP_SUMMARY"
-            echo '\`\`\`' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'O verificador não produziu um relatório.' >> "$GITHUB_STEP_SUMMARY"
           fi
