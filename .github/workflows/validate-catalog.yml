@@ -33,17 +33,13 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
     timeout-minutes: 12
     steps:
       - name: Obter código
         uses: actions/checkout@v4
-      - name: Preparar Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Instalar Playwright e Chromium
-        run: |
-          npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium
+      - name: Instalar dependência Playwright
+        run: npm install --no-save playwright@1.56.1
       - name: Testar interface e transições de áudio simuladas
         run: node scripts/browser-smoke.mjs
