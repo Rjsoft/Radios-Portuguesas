@@ -46,3 +46,16 @@ Os **streams** correspondentes responderam corretamente. HTTP 403 no website pod
 - Repetir monitorização em diferentes horários antes de classificar indisponibilidades permanentes.
 
 Os testes são de **conectividade**, não garantem que o áudio seja audível nem que os formatos sejam suportados em todos os dispositivos.
+
+## Verificação HLS/CORS — CM Rádio
+
+Execução: [GitHub Actions 43442165478](https://github.com/Rjsoft/Radios-Portuguesas/actions/runs/43442165478).
+
+- Manifesto `output-stream_1.m3u8`: HTTP 206 (resposta parcial solicitada), tipo `application/vnd.apple.mpegurl`.
+- Cabeçalho `Access-Control-Allow-Origin: *` no manifesto.
+- Segmento de áudio: HTTP 206 (Range), tipo `audio/aac`.
+- Cabeçalho `Access-Control-Allow-Origin: *` no segmento.
+- Foram lidos 49 152 bytes do segmento, sem descarregar a transmissão completa.
+- Resultado do diagnóstico de manifesto/segmento/CORS: **0 erros detetados**.
+
+**Limite de interpretação:** este diagnóstico comprova acessibilidade HTTP e permissões CORS no momento do teste. Não valida descodificação AAC, estabilidade de reprodução prolongada nem reprodução audível num dispositivo real.
