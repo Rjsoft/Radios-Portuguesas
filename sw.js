@@ -1,7 +1,10 @@
 // Service worker da Rádios Portugal Live.
 // Guarda apenas a interface (para abrir offline). Nunca guarda nem interceta os streams de rádio.
 // Ao alterar ícones, logos ou o manifesto, aumente a versão abaixo.
-const CACHE = "radiospt-v5";
+// Namespace por scope: duas PWAs no mesmo domínio não partilham nem apagam caches.
+const APP_SCOPE = new URL(self.registration.scope).pathname;
+const CACHE_PREFIX = `radiospt:${encodeURIComponent(APP_SCOPE)}:`;
+const CACHE = `${CACHE_PREFIX}v6`;
 const ASSETS = [
   "./",
   "./manifest.webmanifest",
@@ -20,7 +23,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });

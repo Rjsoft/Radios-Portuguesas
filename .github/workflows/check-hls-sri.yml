@@ -1,0 +1,30 @@
+name: Verificar distribuição hls.js (SRI)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/check-hls-sri.yml'
+      - 'index.html'
+      - 'scripts/check-hls-sri.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sri:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Validar SHA-384 da biblioteca publicada
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --max-time 35 \
+            'https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js' \
+            --output /tmp/hls.min.js
+          test -s /tmp/hls.min.js
+          echo "Tamanho: $(wc -c < /tmp/hls.min.js) bytes"
+          node scripts/check-hls-sri.mjs /tmp/hls.min.js

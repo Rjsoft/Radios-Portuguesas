@@ -267,10 +267,47 @@ let current = null;   // estação selecionada
 let status = "idle";  // idle | loading | playing | paused | error
 const CONNECT_TIMEOUT_MS = 15000; // tempo máximo em "A ligar…" antes de mostrar erro
 let connectTimer;
+let playAttempt = 0; // identifica a tentativa atual e ignora erros de tentativas anteriores
+let hlsInstance = null;
+let hlsScriptPromise = null;
+const HLS_LIBRARY_URL = "https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js";
+const HLS_LIBRARY_INTEGRITY = "sha384-p9vgU/7IYJWd3I4STrtqxqR/2cAQlhIX7D/HrTnIMEjjcUox165b7se7sxmm3zDg";
+
+// Carrega a biblioteca apenas quando necessária (browsers sem HLS nativo).
+function loadHlsLibrary() {
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (hlsScriptPromise) return hlsScriptPromise;
+  hlsScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = HLS_LIBRARY_URL;
+    script.integrity = HLS_LIBRARY_INTEGRITY;
+    script.crossOrigin = "anonymous"; // necessário para verificar SRI em recursos de outra origem
+    script.async = true;
+    script.onload = () => window.Hls ? resolve(window.Hls) : reject(new Error("Biblioteca HLS indisponível"));
+    script.onerror = () => reject(new Error("Não foi possível carregar o suporte HLS"));
+    document.head.append(script);
+  }).catch((error) => {
+    hlsScriptPromise = null; // permitir nova tentativa se o CDN estiver temporariamente indisponível
+    throw error;
+  });
+  return hlsScriptPromise;
+}
+
+function showPlaybackError(message) {
+  ++playAttempt; // rejeita callbacks assíncronos de uma reprodução que falhou
+  stopStream();
+  setStatus("error");
+  if (message) $("pStatus").textContent = message;
+}
 
 function startConnectTimer() {
   clearTimeout(connectTimer);
-  connectTimer = setTimeout(() => { if (status === "loading") { stopStream(); setStatus("error"); } }, CONNECT_TIMEOUT_MS);
+  const attempt = playAttempt;
+  connectTimer = setTimeout(() => {
+    if (attempt === playAttempt && status === "loading") {
+      showPlaybackError("A ligação demorou demasiado tempo. Tente novamente.");
+    }
+  }, CONNECT_TIMEOUT_MS);
 }
 
 function setStatus(next) {
@@ -307,31 +344,74 @@ function liveDot() {
 }
 
 function stopStream() {
+  if (hlsInstance) {
+    hlsInstance.destroy();
+    hlsInstance = null;
+  }
   audio.pause();
   audio.removeAttribute("src");
   audio.load(); // liberta a ligação ao stream anterior
 }
 
 function play(station) {
+  const attempt = ++playAttempt;
   stopStream();
   current = station;
   store.set("lastStationId", station.id);
   $("pName").textContent = station.name;
   paintAvatar($("pAvatar"), station);
 
-  if (station.streamType === "hls" && !audio.canPlayType("application/vnd.apple.mpegurl")) {
-    setStatus("error");
-    $("pStatus").textContent = "Este browser não reproduz streams HLS nativamente. Copie o URL e use o VLC.";
-    return;
-  }
-  audio.src = station.streamUrl;
   setStatus("loading");
   startConnectTimer(); // nova rádio: o prazo recomeça, mesmo que a anterior ainda estivesse a ligar
-  audio.play().catch((err) => { if (err.name !== "AbortError") setStatus("error"); });
+
+  const startAudio = () => {
+    audio.play().catch((err) => {
+      if (attempt !== playAttempt || err.name === "AbortError") return;
+      // Alguns browsers exigem uma nova interação após o carregamento assíncrono do HLS.
+      if (err.name === "NotAllowedError") {
+        showPlaybackError("O navegador bloqueou o início automático do áudio. Toque em «Tentar novamente» para ouvir.");
+      } else if (err.name === "NotSupportedError") {
+        showPlaybackError("Este navegador não suporta o formato de áudio desta rádio.");
+      } else {
+        showPlaybackError("Não foi possível iniciar o áudio. Tente novamente.");
+      }
+    });
+  };
+
+  if (station.streamType !== "hls" || audio.canPlayType("application/vnd.apple.mpegurl")) {
+    audio.src = station.streamUrl;
+    startAudio();
+    return;
+  }
+
+  // HLS sem suporte nativo: hls.js precisa de MediaSource e de CORS no servidor de origem.
+  loadHlsLibrary().then((Hls) => {
+    if (attempt !== playAttempt || current?.id !== station.id || status !== "loading") return;
+    if (!Hls.isSupported()) {
+      showPlaybackError("Este browser não suporta HLS. Abra o stream num leitor externo, como o VLC.");
+      return;
+    }
+    const player = new Hls({ enableWorker: true });
+    hlsInstance = player;
+    player.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (attempt === playAttempt) startAudio();
+    });
+    player.on(Hls.Events.ERROR, (_event, data) => {
+      if (attempt !== playAttempt || !data.fatal) return;
+      // Metadados técnicos para diagnóstico sem expor parâmetros de URLs dos streams.
+      console.warn("HLS fatal:", data.type, data.details, data.response?.code ?? "");
+      showPlaybackError("A ligação HLS falhou. Tente novamente ou abra o site da rádio.");
+    });
+    player.loadSource(station.streamUrl);
+    player.attachMedia(audio);
+  }).catch(() => {
+    if (attempt === playAttempt) showPlaybackError("Não foi possível carregar o suporte HLS. Verifique a ligação e tente novamente.");
+  });
 }
 
 function togglePlay(station) {
   if (current && current.id === station.id && (status === "playing" || status === "loading")) {
+    ++playAttempt; // invalida pedidos HLS/play() ainda pendentes
     audio.pause();
     stopStream();          // rádio em direto: ao retomar volta ao "agora"
     setStatus("paused");
@@ -341,15 +421,25 @@ function togglePlay(station) {
 }
 
 audio.addEventListener("loadstart", () => { if (audio.getAttribute("src")) setStatus("loading"); });
-audio.addEventListener("waiting", () => setStatus("loading"));
-audio.addEventListener("stalled", () => { if (status !== "playing") setStatus("loading"); });
-audio.addEventListener("playing", () => setStatus("playing"));
-audio.addEventListener("error", () => { if (audio.getAttribute("src")) setStatus("error"); });
+audio.addEventListener("waiting", () => {
+  if (current && (status === "playing" || status === "loading")) setStatus("loading");
+});
+audio.addEventListener("stalled", () => {
+  if (current && (status === "playing" || status === "loading")) setStatus("loading");
+});
+audio.addEventListener("playing", () => {
+  if (current && status === "loading") setStatus("playing");
+});
+audio.addEventListener("error", () => {
+  if (current && (status === "playing" || status === "loading")) showPlaybackError();
+});
 // Pausa vinda de fora da app (chamada, auscultadores, teclas multimédia). As pausas pedidas pela
 // própria app já mudaram o estado, ou o áudio já voltou a tocar (audio.paused === false).
 audio.addEventListener("pause", () => { if (audio.paused && (status === "playing" || status === "loading")) setStatus("paused"); });
 // Um stream em direto não deve terminar: se terminar, a ligação caiu.
-audio.addEventListener("ended", () => { if (audio.getAttribute("src") && status !== "paused") setStatus("error"); });
+audio.addEventListener("ended", () => {
+  if (current && (status === "playing" || status === "loading")) showPlaybackError();
+});
 
 /* ---------- Ecrã de bloqueio / teclas multimédia (Media Session) ---------- */
 const isBusy = () => status === "playing" || status === "loading";
