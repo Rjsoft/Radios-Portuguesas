@@ -30,3 +30,20 @@ jobs:
         run: node scripts/check-inline-js.mjs
       - name: Validar catálogo de rádios
         run: node scripts/validate-catalog.mjs
+
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright e Chromium
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Testar interface e transições de áudio simuladas
+        run: node scripts/browser-smoke.mjs
