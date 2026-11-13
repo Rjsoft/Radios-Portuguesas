@@ -294,9 +294,17 @@ function recoverHls(attempt, reason) {
 function scheduleHlsBufferRecovery() {
   if (current?.streamType !== "hls" || !hlsHadAudio || hlsBufferTimer) return;
   const attempt = playAttempt;
+  const timeBeforeWait = audio.currentTime;
   hlsBufferTimer = setTimeout(() => {
     hlsBufferTimer = null;
-    if (attempt === playAttempt && status === "loading") recoverHls(attempt, "buffering prolongado");
+    if (attempt !== playAttempt || status !== "loading") return;
+    // O Chrome pode emitir "waiting"/"stalled" mesmo enquanto o som avança.
+    // Só é uma falha se o relógio de áudio NÃO tiver progredido.
+    if (!audio.paused && audio.currentTime > timeBeforeWait + 0.5) {
+      setStatus("playing");
+      return;
+    }
+    recoverHls(attempt, "buffering sem progresso");
   }, HLS_BUFFER_RECOVERY_MS);
 }
 
@@ -388,6 +396,7 @@ function stopStream() {
 function play(station, recovering = false) {
   if (!recovering) hlsRecoveryCount = 0; // nova seleção ou repetição manual
   hlsHadAudio = false;
+  hlsLastProgressTime = 0;
   const attempt = ++playAttempt;
   stopStream();
   current = station;
@@ -455,16 +464,32 @@ function togglePlay(station) {
 }
 
 audio.addEventListener("loadstart", () => { if (audio.getAttribute("src")) setStatus("loading"); });
-audio.addEventListener("waiting", () => {
-  if (current && (status === "playing" || status === "loading")) {
-    setStatus("loading");
-    scheduleHlsBufferRecovery();
+function onBufferingSignal() {
+  if (!current || (status !== "playing" && status !== "loading")) return;
+  // HAVE_FUTURE_DATA (3) ou HAVE_ENOUGH_DATA (4): ainda existem dados
+  // disponíveis para tocar. Não reiniciar só porque chegou um evento "waiting".
+  if (current.streamType === "hls" && !audio.paused && audio.readyState >= 3) {
+    if (hlsHadAudio && status === "loading") setStatus("playing");
+    return;
   }
-});
-audio.addEventListener("stalled", () => {
-  if (current && (status === "playing" || status === "loading")) {
-    setStatus("loading");
-    scheduleHlsBufferRecovery();
+  setStatus("loading");
+  scheduleHlsBufferRecovery();
+}
+audio.addEventListener("waiting", onBufferingSignal);
+audio.addEventListener("stalled", onBufferingSignal);
+// "timeupdate" comprova que o relógio da reprodução está a avançar.
+// O Chrome pode não emitir outro "playing" depois de um "waiting" transitório.
+let hlsLastProgressTime = 0;
+audio.addEventListener("timeupdate", () => {
+  if (current?.streamType !== "hls" || !hlsHadAudio || audio.paused) return;
+  const time = audio.currentTime;
+  if (time > hlsLastProgressTime + 0.2 || time < hlsLastProgressTime - 1) {
+    hlsLastProgressTime = time;
+    if (status === "loading") {
+      clearTimeout(hlsBufferTimer);
+      hlsBufferTimer = null;
+      setStatus("playing");
+    }
   }
 });
 audio.addEventListener("playing", () => {

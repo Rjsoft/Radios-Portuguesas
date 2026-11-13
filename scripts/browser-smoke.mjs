@@ -204,6 +204,83 @@ try {
     } finally { await page.close(); }
   });
 
+  await test("CM Rádio ignora waiting e stalled falsos quando há buffer suficiente", async () => {
+    const page = await launchPage();
+    try {
+      await page.clock.install();
+      await page.evaluate(() => {
+        window.__fakeHlsInstances = [];
+        class FakeHls {
+          static Events = { MANIFEST_PARSED: "manifest", ERROR: "error" };
+          static isSupported() { return true; }
+          constructor() { window.__fakeHlsInstances.push(this); }
+          handlers = {};
+          on(name, fn) { this.handlers[name] = fn; }
+          loadSource() {}
+          attachMedia() { queueMicrotask(() => this.handlers.manifest?.()); }
+          destroy() {}
+        }
+        window.Hls = FakeHls;
+      });
+      await page.locator("#search").fill("CM Rádio");
+      await page.locator("#grid > li:visible .play-btn").click();
+      await page.waitForFunction(() => window.__pendingPlays.length === 1);
+      await page.evaluate(() => {
+        const a = document.querySelector("#audio");
+        window.__pendingPlays[0].resolve();
+        Object.defineProperty(a, "paused", { configurable: true, value: false });
+        Object.defineProperty(a, "readyState", { configurable: true, value: 4 });
+        a.dispatchEvent(new Event("playing"));
+        a.dispatchEvent(new Event("waiting"));
+        a.dispatchEvent(new Event("stalled"));
+      });
+      assert.match(await page.locator("#pStatus").innerText(), /Em direto/);
+      await page.clock.fastForward(16000);
+      assert.match(await page.locator("#pStatus").innerText(), /Em direto/);
+      assert.equal(await page.evaluate(() => window.__fakeHlsInstances.length), 1);
+    } finally { await page.close(); }
+  });
+
+  await test("CM Rádio volta a Em direto quando timeupdate comprova progresso", async () => {
+    const page = await launchPage();
+    try {
+      await page.clock.install();
+      await page.evaluate(() => {
+        window.__fakeHlsInstances = [];
+        class FakeHls {
+          static Events = { MANIFEST_PARSED: "manifest", ERROR: "error" };
+          static isSupported() { return true; }
+          constructor() { window.__fakeHlsInstances.push(this); }
+          handlers = {};
+          on(name, fn) { this.handlers[name] = fn; }
+          loadSource() {}
+          attachMedia() { queueMicrotask(() => this.handlers.manifest?.()); }
+          destroy() {}
+        }
+        window.Hls = FakeHls;
+      });
+      await page.locator("#search").fill("CM Rádio");
+      await page.locator("#grid > li:visible .play-btn").click();
+      await page.waitForFunction(() => window.__pendingPlays.length === 1);
+      await page.evaluate(() => {
+        const a = document.querySelector("#audio");
+        window.__pendingPlays[0].resolve();
+        Object.defineProperty(a, "paused", { configurable: true, value: false });
+        a.dispatchEvent(new Event("playing"));
+        a.dispatchEvent(new Event("waiting"));
+      });
+      assert.equal(await page.locator("#pStatus").innerText(), "A ligar…");
+      await page.evaluate(() => {
+        const a = document.querySelector("#audio");
+        Object.defineProperty(a, "currentTime", { configurable: true, value: 3.5 });
+        a.dispatchEvent(new Event("timeupdate"));
+      });
+      assert.match(await page.locator("#pStatus").innerText(), /Em direto/);
+      await page.clock.fastForward(11000);
+      assert.equal(await page.evaluate(() => window.__fakeHlsInstances.length), 1);
+    } finally { await page.close(); }
+  });
+
   await test("pausar CM Rádio cancela recuperação pendente", async () => {
     const page = await launchPage();
     try {
