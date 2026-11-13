@@ -363,7 +363,13 @@ function play(station) {
 
   const startAudio = () => {
     audio.play().catch((err) => {
-      if (attempt === playAttempt && err.name !== "AbortError") {
+      if (attempt !== playAttempt || err.name === "AbortError") return;
+      // Alguns browsers exigem uma nova interação após o carregamento assíncrono do HLS.
+      if (err.name === "NotAllowedError") {
+        showPlaybackError("O navegador bloqueou o início automático do áudio. Toque em «Tentar novamente» para ouvir.");
+      } else if (err.name === "NotSupportedError") {
+        showPlaybackError("Este navegador não suporta o formato de áudio desta rádio.");
+      } else {
         showPlaybackError("Não foi possível iniciar o áudio. Tente novamente.");
       }
     });
