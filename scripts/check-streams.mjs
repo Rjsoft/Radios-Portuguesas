@@ -50,7 +50,7 @@ const INCOMPLETE_TLS_CHAIN = new Set(["UNABLE_TO_VERIFY_LEAF_SIGNATURE", "UNABLE
 async function checkStream(s) {
   const r = await probe(s.streamUrl, STREAM_TIMEOUT_MS, true);
   if (INCOMPLETE_TLS_CHAIN.has(r.error)) {
-    return { ok: true, warn: "certificado TLS incompleto no servidor (Chrome/Edge tocam; outros clientes podem falhar)" };
+    return { ok: null, warn: "certificado TLS incompleto no servidor (compatibilidade não confirmada)" };
   }
   if (r.error) return { ok: false, reason: r.error };
   if (!r.ok) return { ok: false, reason: `HTTP ${r.status}` };
@@ -92,24 +92,26 @@ const rows = await mapLimit(stations, CONCURRENCY, async (s) => ({
   s, stream: await checkStream(s), site: await checkSite(s), logo: checkLogo(s),
 }));
 
-let streamFail = 0, streamWarn = 0, siteFail = 0, logoFail = 0;
+let streamFail = 0, streamWarn = 0, streamUncertain = 0, siteFail = 0, logoFail = 0;
 for (const { s, stream, site, logo } of rows) {
   const tag = s.enabled ? "" : " [desativada]";
   const problems = [];
-  if (!stream.ok) { problems.push(`stream: ${stream.reason}`); if (s.enabled) streamFail++; }
+  if (stream.ok === false) { problems.push(`stream: ${stream.reason}`); if (s.enabled) streamFail++; }
+  if (stream.ok === null && s.enabled) streamUncertain++;
   if (stream.warn) { problems.push(`stream: ${stream.warn}`); streamWarn++; }
   if (!site.ok) { problems.push(`site: ${site.reason}`); siteFail++; }
   if (!logo.ok) { problems.push(`logo: ${logo.reason}`); logoFail++; }
-  const mark = !stream.ok ? "✗" : problems.length ? "⚠" : "✓";
+  const mark = stream.ok === false ? "✗" : problems.length ? "⚠" : "✓";
   console.log(`${mark} ${s.name}${tag}${problems.length ? " — " + problems.join("; ") : ""}`);
 }
 
 const active = stations.filter((s) => s.enabled).length;
 console.log(`\n${active} streams ativos testados`);
-console.log(`${active - streamFail} OK`);
+console.log(`${active - streamFail - streamUncertain} OK confirmados`);
+console.log(`${streamUncertain} por confirmar (TLS incompleto)`);
 console.log(`${streamFail} falharam`);
 console.log(`Avisos de stream: ${streamWarn} · Sites com problemas: ${siteFail} · Logos em falta: ${logoFail}`);
 if (streamFail || streamWarn || siteFail || logoFail) {
   console.log("\nNada foi alterado. Reveja os casos acima antes de editar a lista (ex.: enabled: false).");
 }
-process.exit(streamFail ? 1 : 0);
+process.exit(streamFail || streamUncertain ? 1 : 0);

@@ -1,0 +1,53 @@
+name: Validar catálogo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  catalogo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validar sintaxe dos scripts
+        run: |
+          node --check scripts/check-streams.mjs
+          node --check scripts/validate-catalog.mjs
+          node --check scripts/check-inline-js.mjs
+          node --check sw.js
+          node --check scripts/test-service-worker.mjs
+          node --check scripts/check-hls-sri.mjs
+      - name: Validar JavaScript do HTML
+        run: node scripts/check-inline-js.mjs
+      - name: Validar catálogo de rádios
+        run: node scripts/validate-catalog.mjs
+      - name: Validar isolamento das caches PWA
+        run: node scripts/test-service-worker.mjs
+      - name: Validar configuração local de integridade HLS
+        run: node scripts/check-hls-sri.mjs
+
+  browser:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+    timeout-minutes: 12
+    steps:
+      - name: Obter código
+        uses: actions/checkout@v4
+      - name: Instalar dependência Playwright
+        run: npm install --no-save playwright@1.56.1 @axe-core/playwright@4.10.2
+      - name: Testar interface e transições de áudio simuladas
+        run: node scripts/browser-smoke.mjs
+      - name: Auditar acessibilidade WCAG e layout móvel
+        run: node scripts/audit-accessibility.mjs
